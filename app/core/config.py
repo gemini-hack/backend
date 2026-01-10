@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/mira_db"
     
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
     # JWT
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"

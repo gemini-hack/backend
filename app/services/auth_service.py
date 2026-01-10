@@ -14,6 +14,8 @@ from app.utils.security import (
     create_access_token,
     create_refresh_token,
     generate_token,
+    get_token_hash,
+    verify_refresh_token,
 )
 from app.utils.logger import logger
 from app.utils.exceptions import (
@@ -26,6 +28,7 @@ from app.utils.exceptions import (
     UserAlreadyExistsException,
     OrganizationAlreadyExistsException,
 )
+from app.core.redis import SessionStore
 from app.models.user import (
     User,
     Organization,
@@ -170,16 +173,16 @@ class AuthService(BaseService):
         user.last_login_at = datetime.now(timezone.utc)
         user.last_login_ip = ip_address
         
+        # Generate session ID
+        session_id = SessionStore.generate_session_id()
+        
         # Generate tokens
         access_token = create_access_token(
             user_id=str(user.id),
             organization_id=str(user.organization_id),
             role=user.role.value,
+            session_id=str(session_id),
         )
-        
-        # Pre-generate session UUID so we can include it in JWT
-        import uuid as uuid_lib
-        session_id = uuid_lib.uuid4()
         
         # Create JWT refresh token with session ID
         refresh_token_str = create_refresh_token(
@@ -189,16 +192,15 @@ class AuthService(BaseService):
             session_id=str(session_id),
         )
         
-        # Store refresh token with pre-generated ID
-        refresh_token_obj = RefreshToken(
-            id=session_id,
-            token=refresh_token_str,
+        # Store session in Redis
+        await SessionStore.create(
             user_id=user.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            org_id=user.organization_id,
+            session_id=session_id,
+            token_hash=get_token_hash(refresh_token_str),
             device_info=user_agent,
             ip_address=ip_address,
         )
-        self.db.add(refresh_token_obj)
         
         # Log audit
         await self._log_audit(
@@ -227,52 +229,76 @@ class AuthService(BaseService):
         refresh_token: str,
         ip_address: Optional[str] = None,
     ) -> RefreshResponse:
-        """Refresh access token using refresh token."""
-        
-        result = await self.db.execute(
-            select(RefreshToken)
-            .options(selectinload(RefreshToken.user).selectinload(User.organization))
-            .where(
-                and_(
-                    RefreshToken.token == refresh_token,
-                    RefreshToken.revoked_at.is_(None),
-                )
-            )
-        )
-        token_obj = result.scalar_one_or_none()
-        
-        if not token_obj:
+        """Refresh access token using refresh token strategy with rotation."""
+        # 1. Verify JWT signature and structure
+        try:
+            payload = verify_refresh_token(refresh_token)
+            session_id = payload.get("sid")
+            user_id = payload.get("sub")
+            if not session_id or not user_id:
+                raise TokenInvalidException("Token missing session ID")
+        except Exception:
             raise TokenInvalidException()
+
+        # 2. Redis Lookup
+        session_data = await SessionStore.get(user_id, session_id)
         
-        # Check expiration
-        if token_obj.expires_at < datetime.now(timezone.utc):
-            token_obj.revoked_at = datetime.now(timezone.utc)
-            await self.db.commit()
+        if not session_data:
             raise TokenExpiredException()
+            
+        # 3. Security checks
+        # Verify token hash matches stored hash
+        if session_data.get("token_hash") != get_token_hash(refresh_token):
+            # Potential token reuse attack! Revoke session
+            await SessionStore.delete(user_id, session_id)
+            logger.warning(f"Refresh token reuse attempt detected! Session: {session_id}")
+            raise TokenInvalidException("Token reuse detected")
         
-        user = token_obj.user
+        # Check DB for user status
+        user = await self.db.execute(
+            select(User).options(selectinload(User.organization)).where(User.id == UUID(user_id))
+        )
+        user = user.scalar_one_or_none()
+        
+        if not user:
+            raise TokenInvalidException("User not found")
         
         # Check if user/org is still active
         if not user.is_active or not user.organization.is_active:
             raise AccountInactiveException()
         
-        # Update last used
-        token_obj.last_used_at = datetime.now(timezone.utc)
-        token_obj.ip_address = ip_address
+        # 4. Token Rotation
+        # Generate new refresh token
+        new_refresh_token = create_refresh_token(
+            user_id=str(user.id),
+            organization_id=str(user.organization_id),
+            role=user.role.value,
+            session_id=str(session_id)
+        )
+        
+        # Update session with new hash and extend expiration
+        await SessionStore.update(
+            user_id=user_id,
+            session_id=session_id,
+            token_hash=get_token_hash(new_refresh_token),
+            ip_address=ip_address,
+        )
         
         # Generate new access token
         access_token = create_access_token(
             user_id=str(user.id),
             organization_id=str(user.organization_id),
             role=user.role.value,
+            session_id=str(session_id),
         )
         
         await self.db.commit()
         
-        logger.info(f"Token refreshed for user: {user.id}")
+        logger.info(f"Token refreshed and rotated for user: {user.id}")
         
         return RefreshResponse(
             access_token=access_token,
+            refresh_token=new_refresh_token,
             token_type="bearer",
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
@@ -287,29 +313,22 @@ class AuthService(BaseService):
         """Logout user by revoking refresh token(s)."""
         
         if logout_all:
-            result = await self.db.execute(
-                select(RefreshToken).where(
-                    and_(
-                        RefreshToken.user_id == user_id,
-                        RefreshToken.revoked_at.is_(None),
-                    )
-                )
-            )
-            tokens = result.scalars().all()
-            for token in tokens:
-                token.revoked_at = datetime.now(timezone.utc)
+            await SessionStore.delete_all(user_id)
         elif refresh_token:
-            result = await self.db.execute(
-                select(RefreshToken).where(
-                    and_(
-                        RefreshToken.token == refresh_token,
-                        RefreshToken.user_id == user_id,
-                    )
+            try:
+                # Extract session ID even if token is expired
+                from jose import jwt
+                payload = jwt.decode(
+                    refresh_token, 
+                    settings.JWT_SECRET_KEY, 
+                    algorithms=[settings.JWT_ALGORITHM], 
+                    options={"verify_exp": False}
                 )
-            )
-            token_obj = result.scalar_one_or_none()
-            if token_obj:
-                token_obj.revoked_at = datetime.now(timezone.utc)
+                session_id = payload.get("sid")
+                if session_id:
+                    await SessionStore.delete(user_id, session_id)
+            except Exception:
+                pass
         
         # Get user for audit log
         user = await self.db.get(User, user_id)

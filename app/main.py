@@ -10,6 +10,7 @@ from app.middleware.correlation_middleware import CorrelationIdMiddleware
 from app.api import api_router
 from app.utils.logger import logger
 from app.db.database import engine
+from app.core.redis import RedisManager
 from app.utils.exceptions import BaseAPIException
 from app.utils.exception_handlers import (
     base_api_exception_handler,
@@ -30,12 +31,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info(f"Starting {settings.APP_NAME}...")
-
+    await RedisManager.connect()
     
     yield
     
     # Shutdown
     logger.info("Shutting down application...")
+    await RedisManager.close()
     await engine.dispose()
     logger.info(f"{settings.APP_NAME} stopped.")
 

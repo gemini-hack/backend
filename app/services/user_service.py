@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.services.base import BaseService
-from app.utils.security import hash_password, generate_token, create_access_token, create_refresh_token
+from app.core.redis import SessionStore
+from app.utils.security import hash_password, generate_token, create_access_token, create_refresh_token, get_token_hash
 from app.utils.logger import logger
 from app.utils.exceptions import (
     UserAlreadyExistsException,
@@ -190,15 +191,15 @@ class UserService(BaseService):
         
         await self.db.flush()
         
+        # Generate session ID
+        session_id = SessionStore.generate_session_id()
+        
         access_token = create_access_token(
             user_id=str(user.id),
             organization_id=str(user.organization_id),
             role=user.role.value,
+            session_id=str(session_id),
         )
-        
-        # Pre-generate session UUID
-        import uuid as uuid_lib
-        session_id = uuid_lib.uuid4()
         
         # Create JWT refresh token with session ID
         refresh_token_str = create_refresh_token(
@@ -208,15 +209,14 @@ class UserService(BaseService):
             session_id=str(session_id),
         )
         
-        # Store refresh token with pre-generated ID
-        refresh_token_obj = RefreshToken(
-            id=session_id,
-            token=refresh_token_str,
+        # Store session in Redis
+        await SessionStore.create(
             user_id=user.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            org_id=user.organization_id,
+            session_id=session_id,
+            token_hash=get_token_hash(refresh_token_str),
             ip_address=ip_address,
         )
-        self.db.add(refresh_token_obj)
         
         # Log audit
         await self._log_audit(
@@ -306,27 +306,29 @@ class UserService(BaseService):
     async def list_sessions(
         self,
         user_id: UUID,
-        current_token: Optional[str] = None,
+        current_session_id: Optional[UUID] = None,
     ) -> list[SessionResponse]:
         """List all active sessions for a user."""
         
-        result = await self.db.execute(
-            select(RefreshToken).where(
-                and_(
-                    RefreshToken.user_id == user_id,
-                    RefreshToken.revoked_at.is_(None),
-                    RefreshToken.expires_at > datetime.now(timezone.utc),
-                )
-            ).order_by(RefreshToken.created_at.desc())
-        )
-        tokens = result.scalars().all()
+        session_list = await SessionStore.list_all(user_id)
         
         sessions = []
-        for token in tokens:
-            session = SessionResponse.model_validate(token)
-            if current_token and token.token == current_token:
-                session.is_current = True
-            sessions.append(session)
+        for session_id, data in session_list:
+            try:
+                session = SessionResponse(
+                    id=session_id,
+                    device_info=data.get("device_info"),
+                    ip_address=data.get("ip_address"),
+                    created_at=datetime.fromisoformat(data.get("created_at")),
+                    last_used_at=datetime.fromisoformat(data.get("last_used_at")),
+                    is_current=(current_session_id == session_id),
+                )
+                sessions.append(session)
+            except (ValueError, KeyError):
+                continue
+        
+        # Sort by last_used_at desc
+        sessions.sort(key=lambda x: x.last_used_at, reverse=True)
         
         return sessions
     
@@ -338,21 +340,10 @@ class UserService(BaseService):
     ) -> None:
         """Revoke a specific session."""
         
-        result = await self.db.execute(
-            select(RefreshToken).where(
-                and_(
-                    RefreshToken.id == session_id,
-                    RefreshToken.user_id == user_id,
-                    RefreshToken.revoked_at.is_(None),
-                )
-            )
-        )
-        token = result.scalar_one_or_none()
+        deleted = await SessionStore.delete(user_id, session_id)
         
-        if not token:
+        if not deleted:
             raise NotFoundException("Session not found")
-        
-        token.revoked_at = datetime.now(timezone.utc)
         
         # Get user for audit
         user = await self.db.get(User, user_id)
