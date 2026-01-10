@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""
-        return [origin.strip() for origin in self.cors_origins.split(",")]
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
     
     model_config = SettingsConfigDict(
