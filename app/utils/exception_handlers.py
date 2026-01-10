@@ -1,5 +1,3 @@
-"""Exception handlers for the application."""
-
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException

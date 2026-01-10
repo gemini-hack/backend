@@ -438,23 +438,22 @@ async def accept_invitation(
     summary="List sessions",
 )
 async def list_sessions(
+    request: Request,
     user: CurrentUser,
     db: DbSession,
 ):
     """List user's active sessions."""
-    try:
-        service = UserService(db)
-        sessions = await service.list_sessions(user_id=user.id)
-        return success_response(
-            status_code=status.HTTP_200_OK,
-            message="Active sessions retrieved",
-            data=jsonable_encoder(sessions),
-        )
-    except Exception as e:
-        return fail_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
-        )
+    # Get current session ID from request state (set by get_current_user dependency)
+    current_sid_str = getattr(request.state, "session_id", None)
+    current_sid = UUID(current_sid_str) if current_sid_str else None
+    
+    service = UserService(db)
+    sessions = await service.list_sessions(user_id=user.id, current_session_id=current_sid)
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Active sessions retrieved",
+        data=jsonable_encoder(sessions),
+    )
 
 
 @router.delete(
@@ -469,19 +468,13 @@ async def revoke_session(
     db: DbSession,
 ):
     """Revoke a specific session."""
-    try:
-        service = UserService(db)
-        await service.revoke_session(
-            session_id=session_id,
-            user_id=user.id,
-            ip_address=get_client_ip(request),
-        )
-        return success_response(
-            status_code=status.HTTP_200_OK,
-            message="Session revoked successfully",
-        )
-    except Exception as e:
-        return fail_response(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
-        )
+    service = UserService(db)
+    await service.revoke_session(
+        session_id=session_id,
+        user_id=user.id,
+        ip_address=get_client_ip(request),
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Session revoked successfully",
+    )

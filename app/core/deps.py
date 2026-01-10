@@ -8,6 +8,7 @@ from typing import Optional
 import uuid
 
 from app.core.config import settings
+from app.core.redis import SessionStore
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.utils.security import decode_token
@@ -22,7 +23,7 @@ async def get_current_user(
 ) -> User:
     """
     Dependency to get the current authenticated user.
-    Validates the access token and returns the User object.
+    Validates the access token and checks session exists in Redis.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -45,14 +46,25 @@ async def get_current_user(
         user_id = payload.get("sub")
         org_id = payload.get("org_id")
         role = payload.get("role")
+        session_id = payload.get("sid")
         
-        if not user_id:
+        if not user_id or not session_id:
             raise credentials_exception
+        
+        # Check if session still exists in Redis (logout invalidates it)
+        session_data = await SessionStore.get(uuid.UUID(user_id), session_id)
+        if session_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has been invalidated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         
         # Store in request state for logging/middleware
         request.state.user_id = user_id
         request.state.org_id = org_id
         request.state.role = role
+        request.state.session_id = session_id
         
     except JWTError:
         raise credentials_exception

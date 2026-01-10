@@ -4,6 +4,8 @@ from jose import jwt, JWTError
 from fastapi import HTTPException
 import secrets
 import bcrypt
+import hashlib
+import hmac
 from user_agents import parse
 
 from app.core.config import settings
@@ -24,10 +26,20 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
+def get_token_hash(token: str) -> str:
+    """
+    Create a secure hash of the token for database storage.
+    SHA-256 HMAC using the secret key.
+    """
+    key = settings.JWT_SECRET_KEY.encode()
+    return hmac.new(key, token.encode(), hashlib.sha256).hexdigest()
+
+
 def create_access_token(
     user_id: str,
     organization_id: str,
     role: str,
+    session_id: Optional[str] = None,
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """Create a JWT access token."""
@@ -40,8 +52,8 @@ def create_access_token(
         "sub": user_id,
         "org_id": organization_id,
         "role": role,
+        "sid": session_id,
         "type": "access",
-        "iat": datetime.now(timezone.utc),
         "exp": expire
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -67,18 +79,18 @@ def create_refresh_token(
         "user": user_data,
         "type": "refresh",
         "iat": datetime.now(timezone.utc),
-        "exp": expire
+        "exp": expire,
+        "sub": user_id
     }
+    if session_id:
+        payload["sid"] = session_id
+        
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
 def generate_refresh_token(subject: Optional[str] = None, role: str = "user") -> str:
-    """Compatibility wrapper for older code. 
-    
-    Accepts `subject` (user id) and optional `role` and returns a signed JWT string.
-    """
+    """Compatibility wrapper for older code."""
     user_id = str(subject) if subject is not None else ""
-    # Uses empty org_id for backward compatibility
     return create_refresh_token(user_id, "", role)
 
 
