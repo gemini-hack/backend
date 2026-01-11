@@ -20,19 +20,13 @@ class BaseService:
         include_org: bool = False,
     ) -> Optional[User]:
         """Get user by email."""
-        query = select(User).where(User.email == email.lower())
         if include_org:
-            query = query.options(selectinload(User.organization))
-        
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+            return await User.fetch_one_with(self.db, "organization", email=email.lower())
+        return await User.fetch_unique(self.db, email=email.lower())
         
     async def _get_organization_by_email(self, email: str) -> Optional[Organization]:
         """Get organization by email."""
-        result = await self.db.execute(
-            select(Organization).where(Organization.email == email.lower())
-        )
-        return result.scalar_one_or_none()
+        return await Organization.fetch_unique(self.db, email=email.lower())
     
     async def _log_audit(
         self,
@@ -45,7 +39,6 @@ class BaseService:
         ip_address: Optional[str] = None,
     ) -> None:
         """Log an audit event."""
-        # Ensure AuditLog model exists and imports are correct
         audit_log = AuditLog(
             user_id=user_id,
             organization_id=organization_id,
@@ -55,4 +48,4 @@ class BaseService:
             details=details,
             ip_address=ip_address,
         )
-        self.db.add(audit_log)
+        audit_log.add(self.db)

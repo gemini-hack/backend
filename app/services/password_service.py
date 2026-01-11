@@ -1,5 +1,3 @@
-"""Password and email verification service."""
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
@@ -76,15 +74,12 @@ class PasswordService(BaseService):
             return
         
         # Invalidate existing unused tokens
-        result = await self.db.execute(
-            select(PasswordResetToken).where(
-                and_(
-                    PasswordResetToken.user_id == user.id,
-                    PasswordResetToken.used_at.is_(None),
-                )
+        tokens = await (PasswordResetToken.query(self.db)
+            .filter(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None)
             )
-        )
-        tokens = result.scalars().all()
+            .all())
         for token in tokens:
             token.used_at = datetime.now(timezone.utc)
         
@@ -94,7 +89,7 @@ class PasswordService(BaseService):
             token=generate_token(64),
             expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         )
-        self.db.add(reset_token)
+        reset_token.add(self.db)
         
         # Log audit
         await self._log_audit(
@@ -119,17 +114,13 @@ class PasswordService(BaseService):
     ) -> None:
         """Reset password using reset token."""
         
-        result = await self.db.execute(
-            select(PasswordResetToken)
-            .options(selectinload(PasswordResetToken.user))
-            .where(
-                and_(
-                    PasswordResetToken.token == token,
-                    PasswordResetToken.used_at.is_(None),
-                )
+        token_obj = await (PasswordResetToken.query(self.db)
+            .with_relations("user")
+            .filter(
+                PasswordResetToken.token == token,
+                PasswordResetToken.used_at.is_(None)
             )
-        )
-        token_obj = result.scalar_one_or_none()
+            .one_or_none())
         
         if not token_obj:
             raise TokenInvalidException("Invalid or already used reset token")
@@ -147,15 +138,12 @@ class PasswordService(BaseService):
         token_obj.used_at = datetime.now(timezone.utc)
         
         # Revoke all refresh tokens (force re-login)
-        result = await self.db.execute(
-            select(RefreshToken).where(
-                and_(
-                    RefreshToken.user_id == user.id,
-                    RefreshToken.revoked_at.is_(None),
-                )
+        tokens = await (RefreshToken.query(self.db)
+            .filter(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked_at.is_(None)
             )
-        )
-        tokens = result.scalars().all()
+            .all())
         for t in tokens:
             t.revoked_at = datetime.now(timezone.utc)
         
@@ -179,17 +167,13 @@ class PasswordService(BaseService):
     ) -> None:
         """Verify user's email address."""
         
-        result = await self.db.execute(
-            select(EmailVerificationToken)
-            .options(selectinload(EmailVerificationToken.user))
-            .where(
-                and_(
-                    EmailVerificationToken.token == token,
-                    EmailVerificationToken.verified_at.is_(None),
-                )
+        token_obj = await (EmailVerificationToken.query(self.db)
+            .with_relations("user")
+            .filter(
+                EmailVerificationToken.token == token,
+                EmailVerificationToken.verified_at.is_(None)
             )
-        )
-        token_obj = result.scalar_one_or_none()
+            .one_or_none())
         
         if not token_obj:
             raise TokenInvalidException("Invalid or already used verification token")
@@ -231,15 +215,12 @@ class PasswordService(BaseService):
             return
         
         # Invalidate existing unused tokens
-        result = await self.db.execute(
-            select(EmailVerificationToken).where(
-                and_(
-                    EmailVerificationToken.user_id == user.id,
-                    EmailVerificationToken.verified_at.is_(None),
-                )
+        tokens = await (EmailVerificationToken.query(self.db)
+            .filter(
+                EmailVerificationToken.user_id == user.id,
+                EmailVerificationToken.verified_at.is_(None)
             )
-        )
-        tokens = result.scalars().all()
+            .all())
         for token in tokens:
             token.verified_at = datetime.now(timezone.utc)
         
@@ -249,7 +230,7 @@ class PasswordService(BaseService):
             token=generate_token(64),
             expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
-        self.db.add(verification_token)
+        verification_token.add(self.db)
         
         await self.db.commit()
         

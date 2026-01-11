@@ -75,8 +75,7 @@ class AuthService(BaseService):
             is_active=True,
             is_onboarded=False,
         )
-        self.db.add(organization)
-        await self.db.flush()
+        await organization.insert(self.db, commit=False, flush=True)
         
         # Create owner user
         user = User(
@@ -90,8 +89,7 @@ class AuthService(BaseService):
             is_active=True,
             email_verified=False,
         )
-        self.db.add(user)
-        await self.db.flush()
+        await user.insert(self.db, commit=False, flush=True)
         
         # Create email verification token
         verification_token = EmailVerificationToken(
@@ -99,7 +97,7 @@ class AuthService(BaseService):
             token=generate_token(64),
             expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
-        self.db.add(verification_token)
+        verification_token.add(self.db)
         
         # Log audit event
         await self._log_audit(
@@ -255,10 +253,7 @@ class AuthService(BaseService):
             raise TokenInvalidException("Token reuse detected")
         
         # Check DB for user status
-        user = await self.db.execute(
-            select(User).options(selectinload(User.organization)).where(User.id == UUID(user_id))
-        )
-        user = user.scalar_one_or_none()
+        user = await User.fetch_one_with(self.db, "organization", id=UUID(user_id))
         
         if not user:
             raise TokenInvalidException("User not found")
