@@ -48,4 +48,4 @@ class BaseService:
             details=details,
             ip_address=ip_address,
         )
-        self.db.add(audit_log)
+        audit_log.add(self.db)

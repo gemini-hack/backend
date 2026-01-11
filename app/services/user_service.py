@@ -86,7 +86,7 @@ class UserService(BaseService):
                 expires_at=datetime.now(timezone.utc) + timedelta(days=7),
                 status=InvitationStatus.PENDING,
             )
-            self.db.add(invitation)
+            invitation.add(self.db)
         
         # Log audit
         await self._log_audit(

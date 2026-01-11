@@ -94,7 +94,7 @@ class PasswordService(BaseService):
             token=generate_token(64),
             expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         )
-        self.db.add(reset_token)
+        reset_token.add(self.db)
         
         # Log audit
         await self._log_audit(
@@ -249,7 +249,7 @@ class PasswordService(BaseService):
             token=generate_token(64),
             expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         )
-        self.db.add(verification_token)
+        verification_token.add(self.db)
         
         await self.db.commit()
         
