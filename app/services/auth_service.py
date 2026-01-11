@@ -75,8 +75,7 @@ class AuthService(BaseService):
             is_active=True,
             is_onboarded=False,
         )
-        self.db.add(organization)
-        await self.db.flush()
+        await organization.insert(self.db, commit=False, flush=True)
         
         # Create owner user
         user = User(
@@ -90,8 +89,7 @@ class AuthService(BaseService):
             is_active=True,
             email_verified=False,
         )
-        self.db.add(user)
-        await self.db.flush()
+        await user.insert(self.db, commit=False, flush=True)
         
         # Create email verification token
         verification_token = EmailVerificationToken(
