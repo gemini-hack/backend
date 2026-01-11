@@ -173,7 +173,7 @@ class UserService(BaseService):
             is_active=True,
             email_verified=True,  # Email verified since they received invitation
         )
-        self.db.add(user)
+        await user.insert(self.db, commit=False, flush=True)
         
         # Update invitation status
         invitation.status = InvitationStatus.ACCEPTED
