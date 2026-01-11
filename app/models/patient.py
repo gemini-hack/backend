@@ -55,6 +55,14 @@ class AlertStatus(str, enum.Enum):
     ESCALATED = "escalated"
 
 
+class CommunicationPreference(str, enum.Enum):
+    """Communication preferences."""
+    SMS = "sms"
+    CALL = "call"
+    EMAIL = "email"
+    IN_APP = "in_app"
+
+
 class Patient(BaseModel):
     """
     Patient model - represents a patient record managed by an organization.
@@ -100,7 +108,7 @@ class Patient(BaseModel):
     # Monitoring
     status: Mapped[PatientStatus] = mapped_column(Enum(PatientStatus), default=PatientStatus.ACTIVE)
     monitoring_frequency: Mapped[str] = mapped_column(String(50), default="daily")
-    preferred_contact_method: Mapped[str] = mapped_column(String(20), default="sms")
+    preferred_contact_method: Mapped[CommunicationPreference] = mapped_column(Enum(CommunicationPreference), default=CommunicationPreference.SMS)
     preferred_contact_time: Mapped[str | None] = mapped_column(String(50))
     preferred_language: Mapped[str] = mapped_column(String(10), default="en")
     

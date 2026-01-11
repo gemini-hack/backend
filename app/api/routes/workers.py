@@ -58,13 +58,13 @@ async def invite_worker(
 async def list_invitations(
     user: CurrentUser,
     db: DbSession,
-    status: Optional[InvitationStatus] = Query(None),
+    invitation_status: Optional[InvitationStatus] = Query(None, alias="status"),
 ):
     """List organization invitations."""
     service = UserService(db)
     invitations = await service.list_invitations(
         organization_id=user.organization_id,
-        status=status,
+        status=invitation_status,
     )
     return success_response(
         status_code=200,

@@ -1,8 +1,8 @@
-"""initial migration
+"""initial_migration
 
-Revision ID: 1b4a4d68064d
+Revision ID: 56f851e05701
 Revises: 
-Create Date: 2026-01-10 21:07:27.947323
+Create Date: 2026-01-11 21:29:40.954720
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '1b4a4d68064d'
+revision: str = '56f851e05701'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -149,7 +149,7 @@ def upgrade() -> None:
     sa.Column('care_coordinator_id', sa.Uuid(), nullable=True),
     sa.Column('status', sa.Enum('ACTIVE', 'INACTIVE', 'PAUSED', 'DISCHARGED', name='patientstatus'), nullable=False),
     sa.Column('monitoring_frequency', sa.String(length=50), nullable=False),
-    sa.Column('preferred_contact_method', sa.String(length=20), nullable=False),
+    sa.Column('preferred_contact_method', sa.Enum('SMS', 'CALL', 'EMAIL', 'IN_APP', name='communicationpreference'), nullable=False),
     sa.Column('preferred_contact_time', sa.String(length=50), nullable=True),
     sa.Column('preferred_language', sa.String(length=10), nullable=False),
     sa.Column('agent_enabled', sa.Boolean(), nullable=False),

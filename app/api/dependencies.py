@@ -46,10 +46,18 @@ def require_permission(permission: str):
     """
     async def permission_checker(user: CurrentUser) -> User:
         # TODO: Implement actual permission checking logic
-        # For now, just check if user is admin or owner
+        # For now, allow any authenticated user with a valid role
         from app.models.user import UserRole
         
-        if user.role in [UserRole.ORG_ADMIN, UserRole.ORG_OWNER]:
+        # All roles (Owner, Admin, Doctor, Nurse, Coordinator) are allowed
+    
+        if user.role in [
+            UserRole.ORG_OWNER, 
+            UserRole.ORG_ADMIN, 
+            UserRole.DOCTOR, 
+            UserRole.NURSE, 
+            UserRole.COORDINATOR
+        ]:
             return user
         
         from app.utils.exceptions import PermissionDeniedException
