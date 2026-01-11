@@ -255,10 +255,7 @@ class AuthService(BaseService):
             raise TokenInvalidException("Token reuse detected")
         
         # Check DB for user status
-        user = await self.db.execute(
-            select(User).options(selectinload(User.organization)).where(User.id == UUID(user_id))
-        )
-        user = user.scalar_one_or_none()
+        user = await User.fetch_one_with(self.db, "organization", id=UUID(user_id))
         
         if not user:
             raise TokenInvalidException("User not found")
