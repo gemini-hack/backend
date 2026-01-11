@@ -53,16 +53,13 @@ class UserService(BaseService):
             raise UserAlreadyExistsException("A user with this email already exists")
         
         # Check for pending invitation
-        result = await self.db.execute(
-            select(Invitation).where(
-                and_(
-                    Invitation.email == data.email,
-                    Invitation.organization_id == inviter.organization_id,
-                    Invitation.status == InvitationStatus.PENDING,
-                )
+        existing_invitation = await (Invitation.query(self.db)
+            .filter(
+                Invitation.email == data.email,
+                Invitation.organization_id == inviter.organization_id,
+                Invitation.status == InvitationStatus.PENDING
             )
-        )
-        existing_invitation = result.scalar_one_or_none()
+            .one_or_none())
         
         if existing_invitation:
             # Update existing invitation
@@ -110,15 +107,10 @@ class UserService(BaseService):
     async def get_invitation_details(self, token: str) -> InvitationDetailsResponse:
         """Get invitation details for the accept page."""
         
-        result = await self.db.execute(
-            select(Invitation)
-            .options(
-                selectinload(Invitation.organization),
-                selectinload(Invitation.invited_by_user),
-            )
-            .where(Invitation.token == token)
-        )
-        invitation = result.scalar_one_or_none()
+        invitation = await (Invitation.query(self.db)
+            .with_relations("organization", "invited_by_user")
+            .filter(Invitation.token == token)
+            .one_or_none())
         
         if not invitation:
             raise InvitationNotFoundException()
@@ -147,12 +139,10 @@ class UserService(BaseService):
     ) -> LoginResponse:
         """Accept invitation and create user account."""
         
-        result = await self.db.execute(
-            select(Invitation)
-            .options(selectinload(Invitation.organization))
-            .where(Invitation.token == token)
-        )
-        invitation = result.scalar_one_or_none()
+        invitation = await (Invitation.query(self.db)
+            .with_relations("organization")
+            .filter(Invitation.token == token)
+            .one_or_none())
         
         if not invitation:
             raise InvitationNotFoundException()
@@ -270,16 +260,13 @@ class UserService(BaseService):
     ) -> None:
         """Revoke a pending invitation."""
         
-        result = await self.db.execute(
-            select(Invitation).where(
-                and_(
-                    Invitation.id == invitation_id,
-                    Invitation.organization_id == organization_id,
-                    Invitation.status == InvitationStatus.PENDING,
-                )
+        invitation = await (Invitation.query(self.db)
+            .filter(
+                Invitation.id == invitation_id,
+                Invitation.organization_id == organization_id,
+                Invitation.status == InvitationStatus.PENDING
             )
-        )
-        invitation = result.scalar_one_or_none()
+            .one_or_none())
         
         if not invitation:
             raise InvitationNotFoundException()
