@@ -11,22 +11,8 @@ from app.core.config import settings
 from app.db.base_model import Base, BaseModel
 
 # Import all models so they are registered with Base.metadata
-from app.models.user import (
-    Organization,
-    User,
-    RefreshToken,
-    Invitation,
-    PasswordResetToken,
-    EmailVerificationToken,
-    AuditLog,
-)
-from app.models.patient import (
-    Patient,
-    HealthReading,
-    Alert,
-    AgentAction,
-    ScheduledCheck,
-)
+from app.models.user import *
+from app.models.patient import *
 
 config = context.config
 

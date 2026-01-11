@@ -41,6 +41,13 @@ from app.schemas.auth import (
     ErrorResponse,
 )
 
+from app.schemas.patient import (
+    # Patients
+    PatientCreate,
+    PatientResponse,
+    PatientListResponse,
+)
+
 __all__ = [
     # Registration
     "RegisterRequest",
@@ -82,4 +89,9 @@ __all__ = [
     # Generic
     "MessageResponse",
     "ErrorResponse",
+    
+    # Patients
+    "PatientCreate",
+    "PatientResponse",
+    "PatientListResponse",
 ]
