@@ -18,6 +18,7 @@ from app.utils.exceptions import (
     InvitationNotFoundException,
     NotFoundException,
 )
+from app.services.email_service import EmailService
 from app.models.user import (
     User,
     RefreshToken,
@@ -98,7 +99,15 @@ class UserService(BaseService):
         await self.db.commit()
         await self.db.refresh(invitation)
         
-        # TODO: Send invitation email
+        # Send invitation email
+        email_service = EmailService(self.db)
+        await email_service.send_invitation_email(
+            to_email=invitation.email,
+            inviter_name=f"{inviter.first_name} {inviter.last_name}".strip() or inviter.email,
+            organization_name=inviter.organization.name,
+            invitation_link=f"{settings.FRONTEND_URL}/accept-invite?token={invitation.token}",
+            expires_at=invitation.expires_at
+        )
         
         logger.info(f"Invitation sent to {data.email} by {inviter.email}")
         
