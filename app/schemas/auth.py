@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 import re
@@ -45,6 +45,7 @@ class OrganizationResponse(OrganizationBase):
     id: UUID
     is_active: bool
     is_onboarded: bool
+    disease_specializations: List[str] = Field(default_factory=list)
     created_at: datetime
     
     model_config = ConfigDict(

@@ -64,3 +64,31 @@ class PatientListResponse(BaseModel):
     """Schema for list of patients response."""
     patients: List[PatientResponse]
     total: int
+
+class AlertResponse(BaseModel):
+    """Schema for alert response."""
+    id: UUID
+    patient_id: UUID
+    severity: str
+    status: str
+    title: str
+    description: Optional[str] = None
+    ai_assessment: Optional[dict] = None
+    recommended_actions: List[dict] = Field(default_factory=list)
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class AgentActionResponse(BaseModel):
+    """Schema for agent action response."""
+    id: UUID
+    patient_id: UUID
+    action_type: str
+    status: str
+    content: Optional[dict] = None
+    ai_reasoning: Optional[str] = None
+    confidence_score: Optional[float] = None
+    created_at: datetime
+    executed_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
