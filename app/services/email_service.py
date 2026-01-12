@@ -94,7 +94,8 @@ class EmailService:
                 username=self.user,
                 password=self.password,
                 use_tls=use_tls,
-                start_tls=start_tls
+                start_tls=start_tls,
+                timeout=10 # 10 second timeout
             )
             logger.info(f"Email sent to {to_email}: {subject}")
             return True
@@ -139,4 +140,8 @@ class EmailService:
             "app_name": settings.APP_NAME
         }
         subject, html = await self._get_rendered_template("email_verification", context)
+        
+        
+        logger.info(f"VERIFICATION LINK FOR {to_email}: {context['verify_link']}")
+        
         await self._send(to_email, subject, html)

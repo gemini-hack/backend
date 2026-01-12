@@ -21,7 +21,7 @@ from app.models.user import (
     PasswordResetToken,
     EmailVerificationToken,
 )
-from app.services.email_service import EmailService
+from app.tasks.email import send_verification_email_task, send_password_reset_email_task
 
 class PasswordService(BaseService):
     """Password and email verification service."""
@@ -104,8 +104,7 @@ class PasswordService(BaseService):
         await self.db.commit()
         
         # Send password reset email
-        email_service = EmailService(self.db)
-        await email_service.send_password_reset_email(
+        send_password_reset_email_task.delay(
             to_email=email,
             reset_token=reset_token.token
         )
@@ -242,8 +241,7 @@ class PasswordService(BaseService):
         
         logger.info(f"Verification email resent for: {email}")
         # Send verification email
-        email_service = EmailService(self.db)
-        await email_service.send_verification_email(
+        send_verification_email_task.delay(
             to_email=user.email,
             token=verification_token.token
         )

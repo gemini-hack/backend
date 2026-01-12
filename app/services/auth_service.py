@@ -44,7 +44,7 @@ from app.schemas.auth import (
     RefreshResponse,
     UserWithOrgResponse,
 )
-from app.services.email_service import EmailService
+from app.tasks.email import send_verification_email_task
 
 
 class AuthService(BaseService):
@@ -88,7 +88,8 @@ class AuthService(BaseService):
             role=UserRole.ORG_OWNER,
             organization_id=organization.id,
             is_active=True,
-            email_verified=False,
+            email_verified=settings.DEBUG, # Auto-verify in debug mode
+            email_verified_at=datetime.now(timezone.utc) if settings.DEBUG else None,
         )
         await user.insert(self.db, commit=False, flush=True)
         
@@ -114,8 +115,7 @@ class AuthService(BaseService):
         await self.db.commit()
         
         # Send verification email
-        email_service = EmailService(self.db)
-        await email_service.send_verification_email(
+        send_verification_email_task.delay(
             to_email=user.email,
             token=verification_token.token
         )

@@ -1,12 +1,12 @@
 import asyncio
 from app.celery_app import celery_app
-from app.db.database import SessionLocal
+from app.db.database import async_session_factory
 from app.workflows.daily_analysis import DailyAnalysisWorkflow
 from app.utils.logger import logger
 
 async def _run_analysis():
     """Inner async function to run the analysis."""
-    async with SessionLocal() as db:
+    async with async_session_factory() as db:
         workflow = DailyAnalysisWorkflow(db)
         await workflow.execute_all()
 
