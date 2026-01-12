@@ -44,6 +44,7 @@ from app.schemas.auth import (
     RefreshResponse,
     UserWithOrgResponse,
 )
+from app.services.email_service import EmailService
 
 
 class AuthService(BaseService):
@@ -112,7 +113,12 @@ class AuthService(BaseService):
         
         await self.db.commit()
         
-        # TODO: Send verification email
+        # Send verification email
+        email_service = EmailService(self.db)
+        await email_service.send_verification_email(
+            to_email=user.email,
+            token=verification_token.token
+        )
         
         logger.info(f"Organization registered: {organization.name} (owner: {user.email})")
         
