@@ -87,3 +87,4 @@ alembic/versions
 
 # uv
 uv.lock
+celerybeat-schedule
