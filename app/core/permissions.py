@@ -22,6 +22,11 @@ PERM_APPOINTMENTS_READ = "appointments:read"
 PERM_APPOINTMENTS_UPDATE = "appointments:update"
 PERM_APPOINTMENTS_DELETE = "appointments:delete"
 
+PERM_AGENTS_READ = "agents:read"
+PERM_ALERTS_READ = "alerts:read"
+PERM_AGENTS_TRIGGER = "agents:trigger"
+PERM_ORG_UPDATE = "org:update"
+
 # Role Permission Mappings
 ROLE_PERMISSIONS = {
     UserRole.ORG_OWNER: ["*"],  # Super admin for the organization
@@ -48,6 +53,12 @@ ROLE_PERMISSIONS = {
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
         PERM_APPOINTMENTS_DELETE,
+        
+        # Agents & Org
+        PERM_AGENTS_READ,
+        PERM_ALERTS_READ,
+        PERM_AGENTS_TRIGGER,
+        PERM_ORG_UPDATE,
     ],
     
     UserRole.DOCTOR: [
@@ -63,6 +74,11 @@ ROLE_PERMISSIONS = {
         PERM_APPOINTMENTS_CREATE,
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
+        
+        # Agents
+        PERM_AGENTS_READ,
+        PERM_ALERTS_READ,
+        PERM_AGENTS_TRIGGER,
     ],
     
     UserRole.NURSE: [
@@ -73,6 +89,9 @@ ROLE_PERMISSIONS = {
         # Appointments
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
+        
+        # Alerts
+        PERM_ALERTS_READ,
     ],
     
     UserRole.COORDINATOR: [
