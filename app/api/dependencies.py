@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.core.permissions import ROLE_PERMISSIONS
+from app.utils.exceptions import PermissionDeniedException
 
 # Type aliases for cleaner route signatures
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -39,28 +41,40 @@ def require_permission(permission: str):
     """
     Dependency factory for permission checks.
     
-    For now, this is a placeholder. You can implement proper
-    permission-based access control based on your requirements.
-    
-    Example permissions: "invitations:create", "invitations:read", "invitations:revoke"
+    Verifies if the current user has the required permission based on their role.
     """
     async def permission_checker(user: CurrentUser) -> User:
-        # TODO: Implement actual permission checking logic
-        # For now, allow any authenticated user with a valid role
-        from app.models.user import UserRole
         
-        # All roles (Owner, Admin, Doctor, Nurse, Coordinator) are allowed
-    
-        if user.role in [
-            UserRole.ORG_OWNER, 
-            UserRole.ORG_ADMIN, 
-            UserRole.DOCTOR, 
-            UserRole.NURSE, 
-            UserRole.COORDINATOR
-        ]:
+        # Get permissions for user's role
+        user_permissions = ROLE_PERMISSIONS.get(user.role, [])
+        
+        # Check for superuser wildcard
+        if "*" in user_permissions:
             return user
+            
+        # Check specific permission
+        # Logic: 
+        # 1. Exact match
+        # 2. Resource wildcard (e.g. "patients:*")
         
-        from app.utils.exceptions import PermissionDeniedException
+        # Split required permission into resource:action
+        try:
+            resource, action = permission.split(":")
+        except ValueError:
+            # Fallback for simple permissions without colon
+            if permission in user_permissions:
+                return user
+            raise PermissionDeniedException(f"Permission '{permission}' required")
+
+        # Check exact and wildcard matches
+        for user_perm in user_permissions:
+            if user_perm == permission:
+                return user
+            
+            # Check if user has "resource:*" permission
+            if user_perm == f"{resource}:*":
+                return user
+        
         raise PermissionDeniedException(f"Permission '{permission}' required")
     
     return permission_checker
