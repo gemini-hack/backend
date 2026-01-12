@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 
 from sqlalchemy import select, and_, func
 
-from app.models.patient import Patient, PatientStatus
+from app.models.patient import Patient, PatientStatus, Condition
 from app.models.user import User
 from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
 from app.services.base import BaseService
@@ -129,9 +129,38 @@ class PatientService(BaseService):
             total=total
         )
 
-    async def get_patient_by_id(self, patient_id: uuid.UUID, organization_id: uuid.UUID) -> Patient:
-        """Get a patient by ID using BaseModel methods."""
+    async def update_hiv_clinical_data(self, patient: Patient) -> None:
+        """
+        Calculate HIV treatment status and next refill date.
+        Clinical Logic:
+        - Active Defaulter: Missed refill date.
+        - IIT: >28 days since missed refill date.
+        - Active: Returns for refill (handled when updating last_refill_date).
+        """
+        if patient.primary_condition != Condition.HIV or not patient.last_refill_date or not patient.refill_months:
+            return
+
+        # 1. Calculate Next Refill Date
+        # 30 days per month (standard ART refill calculation)
+        patient.next_refill_date = patient.last_refill_date + timedelta(days=patient.refill_months * 30)
         
+        # 2. Update Status based on current date
+        now = date.today()
+        if patient.status in [PatientStatus.ACTIVE, PatientStatus.ACTIVE_DEFAULTER, PatientStatus.IIT]:
+            if now > patient.next_refill_date:
+                days_overdue = (now - patient.next_refill_date).days
+                if days_overdue > 28:
+                    patient.status = PatientStatus.IIT
+                else:
+                    patient.status = PatientStatus.ACTIVE_DEFAULTER
+            else:
+                # If they are currently before their next refill date, they are active
+                patient.status = PatientStatus.ACTIVE
+
+        await patient.update(self.db, commit=True)
+
+    async def get_patient_by_id(self, patient_id: uuid.UUID, organization_id: uuid.UUID) -> Patient:
+        """Get a patient by ID and update clinical status if HIV."""
         patient = await Patient.fetch_unique(
             self.db, 
             id=patient_id, 
@@ -139,4 +168,8 @@ class PatientService(BaseService):
         )
         if not patient:
             raise NotFoundException("Patient not found")
+            
+        if patient.primary_condition == Condition.HIV:
+            await self.update_hiv_clinical_data(patient)
+            
         return patient

@@ -33,6 +33,9 @@ class Organization(BaseModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
     
+    # Specializations (e.g., ["hiv", "hypertension"])
+    disease_specializations: Mapped[list] = mapped_column(JSONB, default=list)
+    
     # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
     invitations = relationship("Invitation", back_populates="organization", cascade="all, delete-orphan")

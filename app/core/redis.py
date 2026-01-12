@@ -17,7 +17,14 @@ class RedisManager:
     
     @classmethod
     async def connect(cls):
-        if cls._redis is None:
+        """Connect to Redis with retries to handle startup delays."""
+        if cls._redis is not None:
+            return
+
+        max_retries = 5
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
             try:
                 cls._redis = aioredis.from_url(
                     settings.REDIS_URL, 
@@ -25,9 +32,16 @@ class RedisManager:
                     decode_responses=True
                 )
                 await cls._redis.ping()
-                logger.info("Connected to Redis")
+                logger.info(f"Successfully connected to Redis (attempt {attempt + 1})")
+                return
             except Exception as e:
-                logger.error(f"Failed to connect to Redis: {e}")
+                cls._redis = None
+                if attempt < max_retries - 1:
+                    logger.warning(f"Redis connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                    import asyncio
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to connect to Redis after {max_retries} attempts: {e}")
                 
     @classmethod
     async def close(cls):

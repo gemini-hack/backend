@@ -20,6 +20,15 @@ class PatientBase(BaseModel):
     medical_history: Optional[str] = None
     current_medications: List[str] = Field(default_factory=list)
     allergies: List[str] = Field(default_factory=list)
+    
+    # HIV Specific
+    date_of_diagnosis: Optional[date] = None
+    art_start_date: Optional[date] = None
+    baseline_viral_load: Optional[int] = None
+    baseline_cd4_count: Optional[int] = None
+    initial_art_regimen: Optional[str] = None
+    current_art_regimen: Optional[str] = None
+    last_viral_load_result: Optional[int] = None
 
 class PatientCreate(PatientBase):
     """Schema for creating a patient."""
@@ -35,6 +44,10 @@ class PatientCreate(PatientBase):
     monitoring_frequency: str = Field("daily", max_length=50)
     preferred_contact_method: CommunicationPreference = Field(CommunicationPreference.SMS)
     preferred_language: str = Field("en", max_length=10)
+    
+    # HIV Refill tracking (User Input)
+    last_refill_date: Optional[date] = None
+    refill_months: Optional[int] = None
 
 class PatientResponse(PatientBase):
     """Schema for patient response."""

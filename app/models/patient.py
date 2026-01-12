@@ -20,6 +20,7 @@ class Condition(str, enum.Enum):
     COPD = "copd"
     KIDNEY_DISEASE = "kidney_disease"
     ASTHMA = "asthma"
+    HIV = "hiv"
     OTHER = "other"
 
 
@@ -34,9 +35,13 @@ class Gender(str, enum.Enum):
 class PatientStatus(str, enum.Enum):
     """Patient monitoring status."""
     ACTIVE = "active"
+    ACTIVE_DEFAULTER = "active_defaulter"
+    IIT = "iit"
     INACTIVE = "inactive"
     PAUSED = "paused"
     DISCHARGED = "discharged"
+    TRANSFERRED_OUT = "transferred_out"
+    DEAD = "dead"
 
 
 class AlertSeverity(str, enum.Enum):
@@ -116,6 +121,23 @@ class Patient(BaseModel):
     agent_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_call_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     alert_thresholds: Mapped[dict] = mapped_column(JSONB, default=dict)
+    
+    # HIV Specific Fields
+    date_of_diagnosis: Mapped[date | None] = mapped_column(Date)
+    art_start_date: Mapped[date | None] = mapped_column(Date)
+    baseline_viral_load: Mapped[int | None] = mapped_column(Integer)
+    baseline_cd4_count: Mapped[int | None] = mapped_column(Integer)
+    
+    initial_art_regimen: Mapped[str | None] = mapped_column(String(255))
+    current_art_regimen: Mapped[str | None] = mapped_column(String(255))
+    
+    last_refill_date: Mapped[date | None] = mapped_column(Date)
+    refill_months: Mapped[int | None] = mapped_column(Integer)
+    next_refill_date: Mapped[date | None] = mapped_column(Date)
+    
+    last_viral_load_sample_date: Mapped[date | None] = mapped_column(Date)
+    last_viral_load_result_date: Mapped[date | None] = mapped_column(Date)
+    last_viral_load_result: Mapped[int | None] = mapped_column(Integer)
     
     # Metadata
     notes: Mapped[str | None] = mapped_column(Text)
