@@ -3,7 +3,7 @@ name: mira
 services:
   app:
     build: .
-    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000
     volumes:
       - .:/app
     ports:
@@ -14,7 +14,33 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: uv run celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: .
+    command: uv run celery -A app.celery_app beat --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   db:
     image: postgres:18
@@ -35,8 +61,14 @@ services:
   redis:
     image: redis:alpine
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     ports:
-      - "6379:6379"
+      - "6378:6379"
     volumes:
       - redis-data:/data
 
