@@ -29,12 +29,25 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     MAX_LOGIN_ATTEMPTS: int = 5
     LOCKOUT_DURATION_MINUTES: int = 15
-    REQUIRE_EMAIL_VERIFICATION: bool = False
+    REQUIRE_EMAIL_VERIFICATION: bool = True
+
+     # Email
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True
+    SMTP_FROM_EMAIL: str = "noreply@mira.ai"
+    SMTP_FROM_NAME: str = "Mira AI"
+
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:3000"
     
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+    
 
     
     model_config = SettingsConfigDict(
