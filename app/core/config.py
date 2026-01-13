@@ -45,7 +45,15 @@ class Settings(BaseSettings):
     
     # Gemini AI
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-flash-latest"
+
+    # Storage (MinIO/S3)
+    S3_ENDPOINT: str = "http://localhost:9000"
+    S3_ACCESS_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadmin"
+    S3_BUCKET_NAME: str = "mira-uploads"
+    S3_REGION: str = "us-east-1"
     
     @property
     def cors_origins_list(self) -> list[str]:
