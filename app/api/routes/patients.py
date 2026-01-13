@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 
 from app.api.dependencies import (
@@ -13,7 +13,12 @@ from app.api.dependencies import (
 from app.models.patient import PatientStatus
 from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
 from app.services.patient_service import PatientService
+from app.services.storage_service import StorageService
 from app.utils.responses import success_response
+from app.tasks.importer import process_patient_batch_import
+from fastapi import UploadFile, File, BackgroundTasks
+import uuid
+import os
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -69,4 +74,49 @@ async def list_patients(
         status_code=status.HTTP_200_OK,
         message="Patients retrieved successfully",
         data=jsonable_encoder(result),
+    )
+
+
+@router.post(
+    "/batch-upload",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Batch upload patients via CSV",
+    dependencies=[Depends(require_permission("patients:create"))],
+)
+async def batch_upload_patients(
+    user: CurrentUser,
+    file: UploadFile = File(...),
+):
+    """Upload a CSV file containing patient data for background processing."""
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only CSV files are allowed"
+        )
+
+    # Generate unique key for storage
+    file_ext = os.path.splitext(file.filename)[1]
+    file_key = f"uploads/{user.organization_id}/{uuid.uuid4()}{file_ext}"
+
+    # Upload to storage
+    storage = StorageService()
+    try:
+        storage.upload_file(file, file_key)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Failed to upload file: {str(e)}"
+        )
+    
+    # Trigger Celery task
+    process_patient_batch_import.delay(
+        file_key=file_key,
+        organization_id=str(user.organization_id),
+        user_id=str(user.id)
+    )
+
+    return success_response(
+        status_code=status.HTTP_202_ACCEPTED,
+        message="File uploaded successfully. Processing started in background.",
+        data={"file_key": file_key}
     )
