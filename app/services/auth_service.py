@@ -88,8 +88,8 @@ class AuthService(BaseService):
             role=UserRole.ORG_OWNER,
             organization_id=organization.id,
             is_active=True,
-            email_verified=settings.DEBUG, # Auto-verify in debug mode
-            email_verified_at=datetime.now(timezone.utc) if settings.DEBUG else None,
+            email_verified=False,
+            email_verified_at=datetime.now(timezone.utc),
         )
         await user.insert(self.db, commit=False, flush=True)
         
