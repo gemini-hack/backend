@@ -5,7 +5,11 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from app.models.patient import Gender, PatientStatus, CommunicationPreference
 from app.models.conditions import Condition
-from app.schemas.conditions import HIVProfileResponse, HIVProfileCreate
+from app.schemas.conditions import (
+    HIVProfileResponse, HIVProfileCreate,
+    HypertensionProfileCreate, HypertensionProfileResponse,
+    DiabetesProfileCreate, DiabetesProfileResponse,
+)
 from app.schemas.agent import AlertResponse, AgentActionResponse, ScheduledCheckResponse
 
 class PatientBase(BaseModel):
@@ -41,6 +45,8 @@ class PatientCreate(PatientBase):
     
     # HIV Specific Initialization (Optional during patient creation)
     hiv_profile: Optional[HIVProfileCreate] = None
+    hypertension_profile: Optional[HypertensionProfileCreate] = None
+    diabetes_profile: Optional[DiabetesProfileCreate] = None
 
 class PatientResponse(PatientBase):
     """Schema for patient response."""
@@ -53,6 +59,8 @@ class PatientResponse(PatientBase):
     
     # Modular Data
     hiv_profile: Optional[HIVProfileResponse] = None
+    hypertension_profile: Optional[HypertensionProfileResponse] = None
+    diabetes_profile: Optional[DiabetesProfileResponse] = None
     
     model_config = ConfigDict(from_attributes=True)
 

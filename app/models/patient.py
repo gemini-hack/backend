@@ -14,7 +14,7 @@ from app.db.base_model import BaseModel
 from app.models.conditions import Condition
 
 if TYPE_CHECKING:
-    from app.models.conditions import HIVProfile
+    from app.models.conditions import HIVProfile, HypertensionProfile, DiabetesProfile
     from app.models.agent import Alert, AgentAction, ScheduledCheck
 
 
@@ -115,6 +115,8 @@ class Patient(BaseModel):
     
     # Modular Relationships
     hiv_profile: Mapped[Optional["HIVProfile"]] = relationship("HIVProfile", back_populates="patient", uselist=False, cascade="all, delete-orphan")
+    hypertension_profile: Mapped[Optional["HypertensionProfile"]] = relationship("HypertensionProfile", back_populates="patient", uselist=False, cascade="all, delete-orphan")
+    diabetes_profile: Mapped[Optional["DiabetesProfile"]] = relationship("DiabetesProfile", back_populates="patient", uselist=False, cascade="all, delete-orphan")
     health_readings = relationship("HealthReading", back_populates="patient", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="patient", cascade="all, delete-orphan")
     agent_actions = relationship("AgentAction", back_populates="patient", cascade="all, delete-orphan")
