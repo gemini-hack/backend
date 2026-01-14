@@ -2,7 +2,8 @@ import uuid
 from typing import List, Dict, Any
 from app.agents.base import BaseWorker
 from app.agents.context import AgentContext, WorkerResult, AgentAction
-from app.models.patient import Condition, HealthReading
+from app.models.patient import HealthReading
+from app.models.conditions import Condition
 from sqlalchemy import select, and_
 from app.utils.logger import logger
 

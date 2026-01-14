@@ -4,9 +4,10 @@ from typing import Optional, List
 
 from sqlalchemy import select, and_, func
 
-from app.models.patient import Patient, PatientStatus, Condition
+from app.models.patient import Patient, PatientStatus
+from app.models.conditions import Condition, HIVProfile
 from app.models.user import User
-from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
+from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientDetailResponse
 from app.services.base import BaseService
 from app.utils.logger import logger
 from app.utils.exceptions import NotFoundException, BadRequestException
@@ -20,10 +21,9 @@ class PatientService(BaseService):
         data: PatientCreate,
         ip_address: Optional[str] = None,
     ) -> PatientResponse:
-        """Create a new patient record using BaseModel methods."""
+        """Create a new patient record with optional condition profiles."""
         
         # Check if patient UID already exists in the organization
-
         existing = await Patient.fetch_unique(
             self.db, 
             patient_uid=data.patient_uid, 
@@ -57,7 +57,7 @@ class PatientService(BaseService):
                 if requested_id not in found_ids:
                     raise BadRequestException(f"Care team member with ID {requested_id} not found in your organization")
 
-        # Create patient
+        # Create patient core record
         patient = Patient(
             organization_id=creator.organization_id,
             patient_uid=data.patient_uid,
@@ -82,6 +82,11 @@ class PatientService(BaseService):
             status=PatientStatus.ACTIVE,
         )
         
+        # Handle HIV Profile if provided
+        if data.primary_condition == Condition.HIV and data.hiv_profile:
+            patient.hiv_profile = HIVProfile(
+                **data.hiv_profile.model_dump()
+            )
 
         await patient.insert(self.db, commit=True)
         
@@ -107,9 +112,13 @@ class PatientService(BaseService):
         skip: int = 0,
         limit: int = 100,
     ) -> PatientListResponse:
-        """Get patients for an organization."""
+        """Get patients for an organization with eager loaded profiles."""
 
-        query = select(Patient).where(Patient.organization_id == organization_id)
+        query = (
+            select(Patient)
+            .where(Patient.organization_id == organization_id)
+            .options(func.selectinload(Patient.hiv_profile))
+        )
         
         if status:
             query = query.where(Patient.status == status)
@@ -131,41 +140,40 @@ class PatientService(BaseService):
 
     async def update_hiv_clinical_data(self, patient: Patient) -> None:
         """
-        Calculate HIV treatment status and next refill date.
-        Clinical Logic:
-        - Active Defaulter: Missed refill date.
-        - IIT: >28 days since missed refill date.
-        - Active: Returns for refill (handled when updating last_refill_date).
+        Calculate HIV treatment status and next refill date within the HIVProfile.
         """
-        if patient.primary_condition != Condition.HIV or not patient.last_refill_date or not patient.refill_months:
+        profile = patient.hiv_profile
+        if not profile or not profile.last_refill_date or not profile.refill_months:
             return
 
         # 1. Calculate Next Refill Date
-        # 30 days per month (standard ART refill calculation)
-        patient.next_refill_date = patient.last_refill_date + timedelta(days=patient.refill_months * 30)
+        profile.next_refill_date = profile.last_refill_date + timedelta(days=profile.refill_months * 30)
         
         # 2. Update Status based on current date
         now = date.today()
         if patient.status in [PatientStatus.ACTIVE, PatientStatus.ACTIVE_DEFAULTER, PatientStatus.IIT]:
-            if now > patient.next_refill_date:
-                days_overdue = (now - patient.next_refill_date).days
+            if now > profile.next_refill_date:
+                days_overdue = (now - profile.next_refill_date).days
                 if days_overdue > 28:
                     patient.status = PatientStatus.IIT
                 else:
                     patient.status = PatientStatus.ACTIVE_DEFAULTER
             else:
-                # If they are currently before their next refill date, they are active
                 patient.status = PatientStatus.ACTIVE
 
-        await patient.update(self.db, commit=True)
+        await self.db.commit()
 
     async def get_patient_by_id(self, patient_id: uuid.UUID, organization_id: uuid.UUID) -> Patient:
-        """Get a patient by ID and update clinical status if HIV."""
-        patient = await Patient.fetch_unique(
-            self.db, 
-            id=patient_id, 
+        """Get a patient by ID with eager loaded relationships."""
+        patient = await Patient.fetch_one_with(
+            self.db,
+            "hiv_profile",
+            "alerts",
+            "agent_actions",
+            id=patient_id,
             organization_id=organization_id
         )
+        
         if not patient:
             raise NotFoundException("Patient not found")
             

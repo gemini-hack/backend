@@ -4,11 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import Organization
-from app.models.patient import Patient, AgentAction, Alert, AlertSeverity, AlertStatus
+from app.models.patient import Patient
+from app.models.agent import AgentAction, Alert, AlertSeverity, AlertStatus
 from app.agents.supervisor import SupervisorAgent
-from app.agents.workers.hypertension import HypertensionWorker
-from app.agents.workers.disengagement import DisengagementWorker
-from app.agents.workers.critic import CriticWorker
 from app.utils.logger import logger
 
 class DailyAnalysisWorkflow:
@@ -39,24 +37,24 @@ class DailyAnalysisWorkflow:
         """Run morning rounds for a specific organization."""
         logger.info(f"Running daily analysis for organization {organization_id}")
         
-        # Fetch organization to get specializations
+        # 1. Fetch organization to get specializations
         from app.models.user import Organization
         org = await Organization.fetch_unique(self.db, id=organization_id)
         if not org:
             logger.error(f"Organization {organization_id} not found")
             return
 
-        # 1. Use Factory to get specialists based on org choices
+        # 2. Use Factory to get specialists based on org choices
         from app.agents.factory import AgentFactory
         specialists = AgentFactory.get_workers_for_org(self.db, org.disease_specializations)
         
-        # 2. Initialize supervisor with specialists
+        # 3. Initialize supervisor with specialists
         supervisor = SupervisorAgent(self.db, specialists)
         
-        # 3. Run the cycle (Morning Rounds)
+        # 4. Run the cycle (Morning Rounds)
         context = await supervisor.run_cycle(organization_id)
         
-        # 4. Persist decisions
+        # 5. Persist decisions
         await self._persist_actions(context)
         
         await self.db.commit()
@@ -77,13 +75,20 @@ class DailyAnalysisWorkflow:
             )
             self.db.add(db_action)
             
-            # If it's urgent or emergency, also create an Alert
-            if action.type in ["emergency_escalation", "urgent_followup"]:
-                severity = (
-                    AlertSeverity.CRITICAL if action.type == "emergency_escalation" 
-                    else AlertSeverity.URGENT
-                )
-                
+            # Create Alert for critical/urgent findings
+            severity = None
+            if action.type == "emergency_escalation":
+                severity = AlertSeverity.CRITICAL
+            elif action.type in [
+                "urgent_followup", 
+                "unsuppressed_vl_intervention", 
+                "iit_recovery_plan"
+            ]:
+                severity = AlertSeverity.URGENT
+            elif action.type == "defaulter_tracing":
+                severity = AlertSeverity.WARNING
+            
+            if severity:
                 alert = Alert(
                     patient_id=uuid.UUID(action.target_id),
                     organization_id=context.organization_id,

@@ -3,10 +3,12 @@ from datetime import date, datetime
 from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.agents.base import BaseWorker
 from app.agents.context import AgentContext, WorkerResult, AgentAction
-from app.models.patient import Condition, PatientStatus
+from app.models.patient import PatientStatus
+from app.models.conditions import Condition
 from app.utils.logger import logger
 
 class HIVWorker(BaseWorker):
@@ -31,8 +33,14 @@ class HIVWorker(BaseWorker):
             if patient.primary_condition != Condition.HIV:
                 continue
             
-            # 1. Analyze Viral Load (Clinical Logic as per USER requirement)
-            vl = patient.last_viral_load_result
+            # Ensure hiv_profile is loaded (usually it is from Supervisor or Service)
+            profile = patient.hiv_profile
+            if not profile:
+                logger.warning(f"Patient {patient.id} has HIV as primary condition but no HIVProfile")
+                continue
+
+            # 1. Analyze Viral Load
+            vl = profile.last_viral_load_result
             if vl is not None:
                 if vl > 1000:
                     result.flagged_patients.append(patient.id)
@@ -61,7 +69,7 @@ class HIVWorker(BaseWorker):
                 result.proposed_actions.append(AgentAction(
                     type="defaulter_tracing",
                     target_id=str(patient.id),
-                    details={"last_refill": patient.last_refill_date, "next_refill": patient.next_refill_date},
+                    details={"last_refill": profile.last_refill_date, "next_refill": profile.next_refill_date},
                     reasoning="Patient missed refill date and is now an active defaulter.",
                     confidence=0.9
                 ))

@@ -8,8 +8,8 @@ from app.api.dependencies import (
     DbSession,
     require_permission,
 )
-from app.models.patient import Alert, AgentAction, AlertStatus
-from app.schemas.patient import AlertResponse, AgentActionResponse
+from app.models.agent import Alert, AgentAction, AlertStatus
+from app.schemas.agent import AlertResponse, AgentActionResponse
 from app.schemas.auth import OrganizationResponse
 from app.workflows.daily_analysis import DailyAnalysisWorkflow
 from app.utils.responses import success_response

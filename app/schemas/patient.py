@@ -3,7 +3,10 @@ from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
-from app.models.patient import Condition, Gender, PatientStatus, CommunicationPreference
+from app.models.patient import Gender, PatientStatus, CommunicationPreference
+from app.models.conditions import Condition
+from app.schemas.conditions import HIVProfileResponse, HIVProfileCreate
+from app.schemas.agent import AlertResponse, AgentActionResponse, ScheduledCheckResponse
 
 class PatientBase(BaseModel):
     """Base schema for patient."""
@@ -20,15 +23,6 @@ class PatientBase(BaseModel):
     medical_history: Optional[str] = None
     current_medications: List[str] = Field(default_factory=list)
     allergies: List[str] = Field(default_factory=list)
-    
-    # HIV Specific
-    date_of_diagnosis: Optional[date] = None
-    art_start_date: Optional[date] = None
-    baseline_viral_load: Optional[int] = None
-    baseline_cd4_count: Optional[int] = None
-    initial_art_regimen: Optional[str] = None
-    current_art_regimen: Optional[str] = None
-    last_viral_load_result: Optional[int] = None
 
 class PatientCreate(PatientBase):
     """Schema for creating a patient."""
@@ -45,9 +39,8 @@ class PatientCreate(PatientBase):
     preferred_contact_method: CommunicationPreference = Field(CommunicationPreference.SMS)
     preferred_language: str = Field("en", max_length=10)
     
-    # HIV Refill tracking (User Input)
-    last_refill_date: Optional[date] = None
-    refill_months: Optional[int] = None
+    # HIV Specific Initialization (Optional during patient creation)
+    hiv_profile: Optional[HIVProfileCreate] = None
 
 class PatientResponse(PatientBase):
     """Schema for patient response."""
@@ -58,37 +51,18 @@ class PatientResponse(PatientBase):
     created_at: datetime
     updated_at: datetime
     
+    # Modular Data
+    hiv_profile: Optional[HIVProfileResponse] = None
+    
     model_config = ConfigDict(from_attributes=True)
+
+class PatientDetailResponse(PatientResponse):
+    """Detailed patient response including health logs and agent data."""
+    alerts: List[AlertResponse] = Field(default_factory=list)
+    agent_actions: List[AgentActionResponse] = Field(default_factory=list)
+    scheduled_checks: List[ScheduledCheckResponse] = Field(default_factory=list)
 
 class PatientListResponse(BaseModel):
     """Schema for list of patients response."""
     patients: List[PatientResponse]
     total: int
-
-class AlertResponse(BaseModel):
-    """Schema for alert response."""
-    id: UUID
-    patient_id: UUID
-    severity: str
-    status: str
-    title: str
-    description: Optional[str] = None
-    ai_assessment: Optional[dict] = None
-    recommended_actions: List[dict] = Field(default_factory=list)
-    created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
-
-class AgentActionResponse(BaseModel):
-    """Schema for agent action response."""
-    id: UUID
-    patient_id: UUID
-    action_type: str
-    status: str
-    content: Optional[dict] = None
-    ai_reasoning: Optional[str] = None
-    confidence_score: Optional[float] = None
-    created_at: datetime
-    executed_at: Optional[datetime] = None
-    
-    model_config = ConfigDict(from_attributes=True)

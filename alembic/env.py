@@ -13,6 +13,8 @@ from app.db.base_model import Base, BaseModel
 # Import all models so they are registered with Base.metadata
 from app.models.user import *
 from app.models.patient import *
+from app.models.conditions import *
+from app.models.agent import *
 from app.models.template import *
 
 config = context.config
