@@ -3,9 +3,10 @@ from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 
 from sqlalchemy import select, and_, func
+from sqlalchemy.orm import selectinload
 
 from app.models.patient import Patient, PatientStatus
-from app.models.conditions import Condition, HIVProfile
+from app.models.conditions import Condition, HIVProfile, HypertensionProfile, DiabetesProfile
 from app.models.user import User
 from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientDetailResponse
 from app.services.base import BaseService
@@ -87,8 +88,23 @@ class PatientService(BaseService):
             patient.hiv_profile = HIVProfile(
                 **data.hiv_profile.model_dump()
             )
+        
+        # Handle Hypertension Profile if provided
+        if data.primary_condition == Condition.HYPERTENSION and data.hypertension_profile:
+            patient.hypertension_profile = HypertensionProfile(
+                **data.hypertension_profile.model_dump()
+            )
+        
+        # Handle Diabetes Profile if provided
+        if data.primary_condition == Condition.DIABETES and data.diabetes_profile:
+            patient.diabetes_profile = DiabetesProfile(
+                **data.diabetes_profile.model_dump()
+            )
 
         await patient.insert(self.db, commit=True)
+        
+        # Refresh with eager-loaded relationships
+        await self.db.refresh(patient, ["hiv_profile", "hypertension_profile", "diabetes_profile"])
         
         # Log audit
         await self._log_audit(
@@ -117,7 +133,11 @@ class PatientService(BaseService):
         query = (
             select(Patient)
             .where(Patient.organization_id == organization_id)
-            .options(func.selectinload(Patient.hiv_profile))
+            .options(
+                selectinload(Patient.hiv_profile),
+                selectinload(Patient.hypertension_profile),
+                selectinload(Patient.diabetes_profile),
+            )
         )
         
         if status:
