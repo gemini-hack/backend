@@ -6,11 +6,10 @@ from app.core.config import settings
 
 # Define exchanges
 default_exchange = Exchange('default', type='direct')
-dlx_exchange = Exchange('dlx', type='direct')  # Dead Letter Exchange
+dlx_exchange = Exchange('dlx', type='direct')
 
 # Define queues with DLQ and priority support
 task_queues = (
-    # Default queue with DLQ
     Queue(
         'celery',
         exchange=default_exchange,
