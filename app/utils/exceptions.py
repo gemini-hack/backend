@@ -162,3 +162,13 @@ class BadRequestException(BaseAPIException):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
         )
+
+
+# ============== Service Exceptions ==============
+
+class EmailDeliveryError(Exception):
+    """Raised when email delivery fails."""
+    def __init__(self, message: str, to_email: str = None, original_error: Exception = None):
+        self.to_email = to_email
+        self.original_error = original_error
+        super().__init__(message)

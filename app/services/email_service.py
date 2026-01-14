@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.utils.logger import logger
 from app.models.template import EmailTemplate
+from app.utils.exceptions import EmailDeliveryError
+
 
 class EmailService:
     """Service for sending emails using SMTP and DB templates."""
@@ -71,7 +73,7 @@ class EmailService:
         return subject, html_body
 
     async def _send(self, to_email: str, subject: str, html_content: str) -> bool:
-        """Internal method to send email via SMTP."""
+        """Internal method to send email via SMTP. Raises EmailDeliveryError on failure."""
         if not self.host or self.host == "localhost":
              logger.warning(f"SMTP not configured. Mocking email send to {to_email}: {subject}")
              return True
@@ -95,13 +97,14 @@ class EmailService:
                 password=self.password,
                 use_tls=use_tls,
                 start_tls=start_tls,
-                timeout=10 # 10 second timeout
+                timeout=30
             )
             logger.info(f"Email sent to {to_email}: {subject}")
             return True
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {str(e)}")
-            return False
+            error_msg = f"Failed to send email to {to_email}: {str(e)}"
+            logger.error(error_msg)
+            raise EmailDeliveryError(error_msg, to_email, e)
 
     async def send_invitation_email(
         self, 
