@@ -409,3 +409,92 @@ class UserService(BaseService):
         logger.info(f"Profile updated for user: {user_id}")
         
         return user
+
+    async def list_workers(
+        self,
+        organization_id: UUID,
+        search: Optional[str] = None,
+        role: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> dict:
+        """
+        List healthcare workers in an organization using QueryBuilder.
+        """
+        conditions = [User.organization_id == organization_id]
+        
+        if is_active is not None:
+            conditions.append(User.is_active == is_active)
+            
+        if role:
+            try:
+                role_enum = UserRole(role)
+                conditions.append(User.role == role_enum)
+            except ValueError:
+                pass
+                
+        if search:
+            search_term = f"%{search}%"
+            conditions.append(
+                or_(
+                    User.first_name.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                    User.email.ilike(search_term),
+                    func.concat(User.first_name, ' ', User.last_name).ilike(search_term),
+                )
+            )
+        
+        # Use QueryBuilder
+        base_query = User.query(self.db).filter(*conditions)
+        
+        total = await base_query.count()
+        
+        workers = await (
+            base_query
+            .order_by(User.last_name, User.first_name)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        
+        return {
+            "workers": workers,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        }
+
+    async def update_worker_status(
+        self, 
+        worker_id: UUID, 
+        organization_id: UUID, 
+        is_active: bool,
+        admin_id: UUID
+    ) -> User:
+        """Activate or deactivate a worker account."""
+        query = select(User).where(
+             and_(User.id == worker_id, User.organization_id == organization_id)
+        )
+        result = await self.db.execute(query)
+        worker = result.scalar_one_or_none()
+        
+        if not worker:
+            raise NotFoundException("Worker not found")
+            
+        worker.is_active = is_active
+        
+        # Log audit
+        await self._log_audit(
+            user_id=admin_id,
+            organization_id=organization_id,
+            action="worker_status_updated",
+            resource_type="user",
+            resource_id=str(worker_id),
+            details={"is_active": is_active, "admin_id": str(admin_id)},
+        )
+        
+        await self.db.commit()
+        await self.db.refresh(worker)
+        logger.info(f"Worker {worker.email} status updated to active={is_active} by admin {admin_id}")
+        return worker
