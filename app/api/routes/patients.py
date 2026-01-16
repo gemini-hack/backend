@@ -1,7 +1,10 @@
+import hashlib
+import os
+import uuid
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 
 from app.api.dependencies import (
@@ -10,15 +13,14 @@ from app.api.dependencies import (
     get_client_ip,
     require_permission,
 )
+from app.core.redis import RedisManager
 from app.models.patient import PatientStatus
-from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
+from app.models.conditions import Condition
+from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientUpdate
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
-from app.utils.responses import success_response
 from app.tasks.importer import process_patient_batch_import
-from fastapi import UploadFile, File, BackgroundTasks
-import uuid
-import os
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -98,6 +100,27 @@ async def batch_upload_patients(
             detail="Only CSV files are allowed"
         )
 
+    # Read file content for hashing
+    content = await file.read()
+    await file.seek(0)  # Reset file pointer for upload
+    
+    # Compute content hash
+    content_hash = hashlib.sha256(content).hexdigest()
+    
+    # Check if this file was already uploaded (within last 24 hours)
+    redis = RedisManager.get_client()
+    cache_key = f"batch_upload:{user.organization_id}:{content_hash}"
+    existing = await redis.get(cache_key)
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This file has already been uploaded. Please wait for processing to complete or upload a different file."
+        )
+    
+    # Mark as uploaded (expires in 24 hours)
+    await redis.setex(cache_key, 86400, "processing")
+
     # Generate unique key for storage
     file_ext = os.path.splitext(file.filename)[1]
     file_key = f"uploads/{user.organization_id}/{uuid.uuid4()}{file_ext}"
@@ -107,6 +130,8 @@ async def batch_upload_patients(
     try:
         storage.upload_file(file, file_key)
     except Exception as e:
+        # Clear the cache on upload failure
+        await redis.delete(cache_key)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Failed to upload file: {str(e)}"

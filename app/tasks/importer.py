@@ -6,6 +6,7 @@ from app.services.patient_service import PatientService
 from app.schemas.patient import PatientCreate
 from app.schemas.conditions import HIVProfileCreate, HypertensionProfileCreate, DiabetesProfileCreate
 from app.db.database import async_session_factory
+from sqlalchemy.exc import IntegrityError
 from app.models.user import User
 import asyncio
 import csv
@@ -40,6 +41,7 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
         
         success_count = 0
         failure_count = 0
+        skipped_count = 0
         
         async with async_session_factory() as session:
             patient_service = PatientService(session)
@@ -144,11 +146,24 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                         ip_address="batch_import" 
                     )
                     success_count += 1
+                except IntegrityError as e:
+                    # Rollback after duplicate check
+                    await session.rollback()
+                    logger.warning(f"Skipping duplicate patient {row.get('patient_uid')}: already exists")
+                    skipped_count += 1
                 except Exception as e:
-                    logger.error(f"Failed to import row {row.get('email')}: {e}")
-                    failure_count += 1
+                    # Check if it's a service-level duplicate check
+                    error_str = str(e).lower()
+                    if "already exists" in error_str:
+                        logger.warning(f"Skipping duplicate patient {row.get('patient_uid')}: already exists")
+                        skipped_count += 1
+                    else:
+                        logger.error(f"Failed to import row {row.get('email')} (UID: {row.get('patient_uid')}): {e}")
+                        failure_count += 1
             
-            logger.info(f"Batch import completed. Success: {success_count}, Failed: {failure_count}")
+            logger.info(
+                f"Batch import completed. Success: {success_count}, Skipped (duplicates): {skipped_count}, Failed: {failure_count}"
+            )
 
     asyncio.run(run_import())
 
