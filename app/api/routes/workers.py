@@ -1,24 +1,19 @@
-"""Worker management API routes."""
-
+import uuid
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Query, Body, status
+from fastapi import APIRouter, Depends, Request, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
 
-from app.api.dependencies import (
-    CurrentUser,
-    DbSession,
-    get_client_ip,
-    require_permission,
-)
+from app.api.dependencies import CurrentUser, DbSession, get_client_ip, require_permission
+from app.services.caseload_service import CaseloadService
 from app.services.user_service import UserService
 from app.schemas.auth import (
     InviteWorkerRequest,
+    UserResponse,
 )
 from app.models.user import InvitationStatus
-from app.utils.responses import success_response, fail_response
-
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/workers", tags=["Workers"])
 
