@@ -120,3 +120,78 @@ async def batch_upload_patients(
         message="File uploaded successfully. Processing started in background.",
         data={"file_key": file_key}
     )
+
+
+@router.get(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get patient",
+    dependencies=[Depends(require_permission("patients:read"))],
+)
+async def get_patient(
+    patient_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Get a patient by ID."""
+    from app.schemas.patient import PatientDetailResponse
+    
+    service = PatientService(db)
+    patient = await service.get_patient_by_id(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient retrieved successfully",
+        data=jsonable_encoder(PatientDetailResponse.model_validate(patient)),
+    )
+
+
+@router.patch(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Update patient",
+    dependencies=[Depends(require_permission("patients:update"))],
+)
+async def update_patient(
+    patient_id: UUID,
+    data: PatientUpdate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Update a patient record."""
+    service = PatientService(db)
+    patient = await service.update_patient(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+        data=data.model_dump(exclude_unset=True),
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient updated successfully",
+        data=jsonable_encoder(PatientResponse.model_validate(patient)),
+    )
+
+
+@router.delete(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete patient",
+    dependencies=[Depends(require_permission("patients:delete"))],
+)
+async def delete_patient(
+    patient_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Soft delete a patient (sets status to INACTIVE)."""
+    service = PatientService(db)
+    await service.delete_patient(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient deleted successfully",
+    )

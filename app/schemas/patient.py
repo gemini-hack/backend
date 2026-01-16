@@ -74,3 +74,36 @@ class PatientListResponse(BaseModel):
     """Schema for list of patients response."""
     patients: List[PatientResponse]
     total: int
+    skip: int = 0
+    limit: int = 100
+
+
+class PatientUpdate(BaseModel):
+    """Schema for updating a patient."""
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    date_of_birth: Optional[date] = None
+    gender: Optional[Gender] = None
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    
+    emergency_contact_name: Optional[str] = Field(None, max_length=200)
+    emergency_contact_phone: Optional[str] = Field(None, max_length=20)
+    emergency_contact_relationship: Optional[str] = Field(None, max_length=50)
+    
+    primary_physician_id: Optional[UUID] = None
+    assigned_nurse_id: Optional[UUID] = None
+    care_coordinator_id: Optional[UUID] = None
+    
+    status: Optional[PatientStatus] = None
+    monitoring_frequency: Optional[str] = Field(None, max_length=50)
+    preferred_contact_method: Optional[CommunicationPreference] = None
+    preferred_language: Optional[str] = Field(None, max_length=10)
+    
+    secondary_conditions: Optional[List[str]] = None
+    medical_history: Optional[str] = None
+    current_medications: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None

@@ -201,3 +201,53 @@ class PatientService(BaseService):
             await self.update_hiv_clinical_data(patient)
             
         return patient
+
+    async def update_patient(
+        self,
+        patient_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        data: dict,
+    ) -> Patient:
+        """Update a patient record."""
+        patient = await Patient.fetch_one_with(
+            self.db,
+            "hiv_profile",
+            "hypertension_profile",
+            "diabetes_profile",
+            id=patient_id,
+            organization_id=organization_id
+        )
+        
+        if not patient:
+            raise NotFoundException("Patient not found")
+        
+        # Update only provided fields
+        update_data = {k: v for k, v in data.items() if v is not None}
+        
+        for field, value in update_data.items():
+            if hasattr(patient, field):
+                setattr(patient, field, value)
+        
+        await patient.save(self.db)
+        logger.info(f"Patient {patient.patient_uid} updated")
+        
+        return patient
+
+    async def delete_patient(
+        self,
+        patient_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> None:
+        """Soft delete a patient by setting status to INACTIVE."""
+        patient = await Patient.fetch_unique(
+            self.db,
+            id=patient_id,
+            organization_id=organization_id
+        )
+        
+        if not patient:
+            raise NotFoundException("Patient not found")
+        
+        patient.status = PatientStatus.INACTIVE
+        await patient.save(self.db)
+        logger.info(f"Patient {patient.patient_uid} marked inactive")
