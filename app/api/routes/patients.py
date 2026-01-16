@@ -58,15 +58,19 @@ async def create_patient(
 async def list_patients(
     user: CurrentUser,
     db: DbSession,
-    patient_status: Optional[PatientStatus] = Query(None, alias="status"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    patient_status: Optional[PatientStatus] = Query(None, alias="status", description="Filter by patient status"),
+    condition: Optional[Condition] = Query(None, description="Filter by primary condition"),
+    search: Optional[str] = Query(None, description="Search by patient name or UID"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=100, description="Pagination limit"),
 ):
     """List patients for the organization."""
     service = PatientService(db)
     result = await service.get_patients(
         organization_id=user.organization_id,
         status=patient_status,
+        condition=condition,
+        search=search,
         skip=skip,
         limit=limit,
     )
