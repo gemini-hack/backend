@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.models.patient import Patient, PatientStatus
