@@ -27,6 +27,10 @@ PERM_ALERTS_READ = "alerts:read"
 PERM_AGENTS_TRIGGER = "agents:trigger"
 PERM_ORG_UPDATE = "org:update"
 
+PERM_CASELOAD_ASSIGN = "caseload:assign"
+PERM_CASELOAD_VIEW = "caseload:view" 
+PERM_WORKER_STATUS_UPDATE = "workers:status" 
+
 # Role Permission Mappings
 ROLE_PERMISSIONS = {
     UserRole.ORG_OWNER: ["*"],  # Super admin for the organization
@@ -59,6 +63,11 @@ ROLE_PERMISSIONS = {
         PERM_ALERTS_READ,
         PERM_AGENTS_TRIGGER,
         PERM_ORG_UPDATE,
+        
+        # Caseload
+        PERM_CASELOAD_ASSIGN,
+        PERM_CASELOAD_VIEW,
+        PERM_WORKER_STATUS_UPDATE,
     ],
     
     UserRole.DOCTOR: [
@@ -102,6 +111,11 @@ ROLE_PERMISSIONS = {
         PERM_APPOINTMENTS_CREATE,
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
+        PERM_APPOINTMENTS_UPDATE,
         PERM_APPOINTMENTS_DELETE,
+        
+        # Caseload
+        PERM_CASELOAD_ASSIGN,
+        PERM_CASELOAD_VIEW,
     ],
 }

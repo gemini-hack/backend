@@ -1,7 +1,10 @@
+import hashlib
+import os
+import uuid
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 
 from app.api.dependencies import (
@@ -10,15 +13,14 @@ from app.api.dependencies import (
     get_client_ip,
     require_permission,
 )
+from app.core.redis import RedisManager
 from app.models.patient import PatientStatus
-from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
+from app.models.conditions import Condition
+from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientUpdate
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
-from app.utils.responses import success_response
 from app.tasks.importer import process_patient_batch_import
-from fastapi import UploadFile, File, BackgroundTasks
-import uuid
-import os
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -58,15 +60,19 @@ async def create_patient(
 async def list_patients(
     user: CurrentUser,
     db: DbSession,
-    patient_status: Optional[PatientStatus] = Query(None, alias="status"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    patient_status: Optional[PatientStatus] = Query(None, alias="status", description="Filter by patient status"),
+    condition: Optional[Condition] = Query(None, description="Filter by primary condition"),
+    search: Optional[str] = Query(None, description="Search by patient name or UID"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=100, description="Pagination limit"),
 ):
     """List patients for the organization."""
     service = PatientService(db)
     result = await service.get_patients(
         organization_id=user.organization_id,
         status=patient_status,
+        condition=condition,
+        search=search,
         skip=skip,
         limit=limit,
     )
@@ -94,6 +100,27 @@ async def batch_upload_patients(
             detail="Only CSV files are allowed"
         )
 
+    # Read file content for hashing
+    content = await file.read()
+    await file.seek(0)  # Reset file pointer for upload
+    
+    # Compute content hash
+    content_hash = hashlib.sha256(content).hexdigest()
+    
+    # Check if this file was already uploaded (within last 24 hours)
+    redis = RedisManager.get_client()
+    cache_key = f"batch_upload:{user.organization_id}:{content_hash}"
+    existing = await redis.get(cache_key)
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This file has already been uploaded. Please wait for processing to complete or upload a different file."
+        )
+    
+    # Mark as uploaded (expires in 24 hours)
+    await redis.setex(cache_key, 86400, "processing")
+
     # Generate unique key for storage
     file_ext = os.path.splitext(file.filename)[1]
     file_key = f"uploads/{user.organization_id}/{uuid.uuid4()}{file_ext}"
@@ -103,6 +130,8 @@ async def batch_upload_patients(
     try:
         storage.upload_file(file, file_key)
     except Exception as e:
+        # Clear the cache on upload failure
+        await redis.delete(cache_key)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Failed to upload file: {str(e)}"
@@ -119,4 +148,79 @@ async def batch_upload_patients(
         status_code=status.HTTP_202_ACCEPTED,
         message="File uploaded successfully. Processing started in background.",
         data={"file_key": file_key}
+    )
+
+
+@router.get(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get patient",
+    dependencies=[Depends(require_permission("patients:read"))],
+)
+async def get_patient(
+    patient_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Get a patient by ID."""
+    from app.schemas.patient import PatientDetailResponse
+    
+    service = PatientService(db)
+    patient = await service.get_patient_by_id(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient retrieved successfully",
+        data=jsonable_encoder(PatientDetailResponse.model_validate(patient)),
+    )
+
+
+@router.patch(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Update patient",
+    dependencies=[Depends(require_permission("patients:update"))],
+)
+async def update_patient(
+    patient_id: UUID,
+    data: PatientUpdate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Update a patient record."""
+    service = PatientService(db)
+    patient = await service.update_patient(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+        data=data.model_dump(exclude_unset=True),
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient updated successfully",
+        data=jsonable_encoder(PatientResponse.model_validate(patient)),
+    )
+
+
+@router.delete(
+    "/{patient_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete patient",
+    dependencies=[Depends(require_permission("patients:delete"))],
+)
+async def delete_patient(
+    patient_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Soft delete a patient (sets status to INACTIVE)."""
+    service = PatientService(db)
+    await service.delete_patient(
+        patient_id=patient_id,
+        organization_id=user.organization_id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Patient deleted successfully",
     )

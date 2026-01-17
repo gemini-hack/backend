@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from sqlalchemy.orm import selectinload
 
 from app.models.patient import Patient, PatientStatus
@@ -125,37 +125,52 @@ class PatientService(BaseService):
         self,
         organization_id: uuid.UUID,
         status: Optional[PatientStatus] = None,
+        condition: Optional[Condition] = None,
+        search: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
     ) -> PatientListResponse:
-        """Get patients for an organization with eager loaded profiles."""
-
-        query = (
-            select(Patient)
-            .where(Patient.organization_id == organization_id)
-            .options(
-                selectinload(Patient.hiv_profile),
-                selectinload(Patient.hypertension_profile),
-                selectinload(Patient.diabetes_profile),
-            )
-        )
+        """Get patients for an organization using QueryBuilder."""
+        conditions = [Patient.organization_id == organization_id]
         
         if status:
-            query = query.where(Patient.status == status)
+            conditions.append(Patient.status == status)
             
-        # Get total count
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar_one()
+        if condition:
+            conditions.append(Patient.primary_condition == condition)
+            
+        if search:
+            search_term = f"%{search}%"
+            conditions.append(
+                or_(
+                    Patient.first_name.ilike(search_term),
+                    Patient.last_name.ilike(search_term),
+                    Patient.patient_uid.ilike(search_term),
+                    func.concat(Patient.first_name, ' ', Patient.last_name).ilike(search_term),
+                )
+            )
+
+        # Get count (separate query builder instance)
+        total = await Patient.query(self.db).filter(*conditions).count()
+        logger.info(f"Patient count for org {organization_id}: {total}")
         
-        # Get patients
-        query = query.order_by(Patient.created_at.desc()).offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        patients = result.scalars().all()
+        # Get patients (fresh query builder instance)
+        patients = await (
+            Patient.query(self.db)
+            .filter(*conditions)
+            .with_relations("hiv_profile", "hypertension_profile", "diabetes_profile")
+            .order_by(Patient.created_at, desc=True)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        logger.info(f"Fetched {len(patients)} patients")
         
         return PatientListResponse(
             patients=[PatientResponse.model_validate(p) for p in patients],
-            total=total
+            total=total,
+            skip=skip,
+            limit=limit,
         )
 
     async def update_hiv_clinical_data(self, patient: Patient) -> None:
@@ -201,3 +216,53 @@ class PatientService(BaseService):
             await self.update_hiv_clinical_data(patient)
             
         return patient
+
+    async def update_patient(
+        self,
+        patient_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        data: dict,
+    ) -> Patient:
+        """Update a patient record."""
+        patient = await Patient.fetch_one_with(
+            self.db,
+            "hiv_profile",
+            "hypertension_profile",
+            "diabetes_profile",
+            id=patient_id,
+            organization_id=organization_id
+        )
+        
+        if not patient:
+            raise NotFoundException("Patient not found")
+        
+        # Update only provided fields
+        update_data = {k: v for k, v in data.items() if v is not None}
+        
+        for field, value in update_data.items():
+            if hasattr(patient, field):
+                setattr(patient, field, value)
+        
+        await patient.save(self.db)
+        logger.info(f"Patient {patient.patient_uid} updated")
+        
+        return patient
+
+    async def delete_patient(
+        self,
+        patient_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> None:
+        """Soft delete a patient by setting status to INACTIVE."""
+        patient = await Patient.fetch_unique(
+            self.db,
+            id=patient_id,
+            organization_id=organization_id
+        )
+        
+        if not patient:
+            raise NotFoundException("Patient not found")
+        
+        patient.status = PatientStatus.INACTIVE
+        await patient.save(self.db)
+        logger.info(f"Patient {patient.patient_uid} marked inactive")

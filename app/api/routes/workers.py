@@ -1,24 +1,19 @@
-"""Worker management API routes."""
-
+import uuid
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Query, Body, status
+from fastapi import APIRouter, Depends, Request, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
 
-from app.api.dependencies import (
-    CurrentUser,
-    DbSession,
-    get_client_ip,
-    require_permission,
-)
+from app.api.dependencies import CurrentUser, DbSession, get_client_ip, require_permission
+from app.services.caseload_service import CaseloadService
 from app.services.user_service import UserService
 from app.schemas.auth import (
     InviteWorkerRequest,
+    UserResponse,
 )
 from app.models.user import InvitationStatus
-from app.utils.responses import success_response, fail_response
-
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/workers", tags=["Workers"])
 
@@ -48,6 +43,40 @@ async def invite_worker(
         data=jsonable_encoder(result),
     )
 
+
+@router.get(
+    "",
+    status_code=status.HTTP_200_OK,
+    summary="List workers",
+    dependencies=[Depends(require_permission("users:read"))],
+)
+async def list_workers(
+    user: CurrentUser,
+    db: DbSession,
+    search: Optional[str] = Query(None, description="Search by name or email"),
+    role: Optional[str] = Query(None, description="Filter by role (nurse, doctor, coordinator, etc.)"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=100, description="Pagination limit"),
+):
+    """List all healthcare workers in the organization."""
+    user_service = UserService(db)
+    result = await user_service.list_workers(
+        organization_id=user.organization_id,
+        search=search,
+        role=role,
+        is_active=is_active,
+        skip=skip,
+        limit=limit,
+    )
+    
+    result["workers"] = [UserResponse.model_validate(w) for w in result["workers"]]
+    
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Workers retrieved successfully",
+        data=jsonable_encoder(result),
+    )
 
 @router.get(
     "/invitations",
@@ -96,4 +125,76 @@ async def revoke_invitation(
     return success_response(
         status_code=status.HTTP_200_OK,
         message="Invitation revoked successfully",
+    )
+
+
+@router.get(
+    "/{worker_id}/caseload",
+    status_code=status.HTTP_200_OK,
+    summary="Get worker caseload",
+    dependencies=[Depends(require_permission("caseload:view"))],
+)
+async def get_worker_caseload(
+    worker_id: str,
+    user: CurrentUser,
+    db: DbSession,
+    search: Optional[str] = Query(None, description="Search by patient name or UID"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=100, description="Pagination limit"),
+):
+    """Get caseload for a specific worker (Admin/Coordinator only)."""
+    try:
+        w_uuid = uuid.UUID(worker_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid worker ID")
+
+    user_service = UserService(db)
+    target_worker = await user_service.get_user_by_id(w_uuid)
+
+    if not target_worker or target_worker.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    caseload_service = CaseloadService(db)
+    result = await caseload_service.get_my_caseload(
+        worker=target_worker,
+        search=search,
+        skip=skip,
+        limit=limit,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Worker caseload retrieved successfully",
+        data=jsonable_encoder(result),
+    )
+
+
+@router.patch(
+    "/{worker_id}/status",
+    status_code=status.HTTP_200_OK,
+    summary="Update worker status",
+    dependencies=[Depends(require_permission("workers:status"))],
+)
+async def update_worker_status(
+    worker_id: str,
+    is_active: bool,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Activate/deactivate a worker. Admin only."""
+    try:
+        w_uuid = uuid.UUID(worker_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid worker ID")
+
+    user_service = UserService(db)
+    worker = await user_service.update_worker_status(
+        worker_id=w_uuid,
+        organization_id=user.organization_id,
+        is_active=is_active,
+        admin_id=user.id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message=f"Worker {worker.email} status updated",
+        data={"worker_id": str(worker.id), "is_active": worker.is_active},
     )
