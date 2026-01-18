@@ -1,9 +1,3 @@
-"""Session data cache for the MIRA voice agent.
-
-Preloads frequently-accessed data at session start to reduce database queries
-during tool calls. Data is stored in a context variable accessible by tools.
-"""
-
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
