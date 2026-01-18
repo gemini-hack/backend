@@ -1,15 +1,80 @@
+# Python bytecode and cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+*.py[cod]
+*$py.class
 *.so
-.env
-.venv
+.Python
+
+# Virtual environments
+.venv/
 venv/
+ENV/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# Git
 .git/
 .gitignore
-*.md
+.gitattributes
+
+# Docker files
+Dockerfile*
+compose*.yml
+docker-compose*.yml
+.docker/
+railway.toml
+
+# Test artifacts
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.eggs/
+
+# Local development files
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+logs/
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Sample data
+sample_*.csv
+
+# Alembic cache
+alembic/versions/__pycache__/
+
+# Agent/IDE artifacts
+.gemini/
+
+# Documentation
+*.md
+!README.md
+
+# Misc
+*.bak
+*.tmp
+*.temp
