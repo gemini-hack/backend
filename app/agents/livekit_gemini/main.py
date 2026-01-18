@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import asyncio
+
 from google.genai import types
 from livekit import agents
 from livekit.agents import cli
@@ -10,6 +12,7 @@ from app.utils.logger import logger
 
 from .tools import MIRA_TOOLS
 from .voice_context import VoiceAgentUserContext, set_current_voice_context, clear_voice_context
+from .session_cache import preload_session_data, set_session_cache, clear_session_cache
 
 # MIRA System Instructions
 MIRA_INSTRUCTIONS = """You are MIRA, an AI healthcare assistant for medical professionals.
@@ -100,6 +103,16 @@ async def entrypoint(ctx: agents.JobContext):
         if voice_ctx:
             set_current_voice_context(voice_ctx)
             logger.info(f"Voice context set: user={voice_ctx.user_id}, role={voice_ctx.role}")
+            
+            # Preload session data for faster tool calls
+            try:
+                cache = await preload_session_data(
+                    organization_id=voice_ctx.organization_id,
+                    user_id=voice_ctx.user_id,
+                )
+                set_session_cache(cache)
+            except Exception as e:
+                logger.warning(f"Failed to preload session data: {e}")
 
         # Configure the RealtimeModel with VAD turn detection settings
         model = google.realtime.RealtimeModel(

@@ -10,6 +10,7 @@ from app.models import Patient, User, Appointment, Alert, AgentAction
 from app.utils.logger import logger
 
 from .security import validate_input, sanitize_query_input, audit_log
+from .session_cache import get_session_cache
 
 
 @function_tool
@@ -32,6 +33,21 @@ async def get_patient_info(patient_name: str) -> str:
     # Sanitize input
     patient_name = sanitize_query_input(patient_name)
     logger.info(f"[TOOL CALLED] get_patient_info with patient_name='{patient_name}'")
+    
+    # Check cache first
+    cache = get_session_cache()
+    if cache:
+        patient = cache.get_patient_by_name(patient_name)
+        if patient:
+            logger.info(f"[CACHE HIT] Found patient in cache")
+            return f"""Patient: {patient['first_name']} {patient['last_name']}
+ID: {patient['patient_uid']}
+Status: {patient['status']}
+Primary Condition: {patient['primary_condition']}
+Phone: {patient['phone'] or 'Not on file'}
+Last Updated: {patient['updated_at'] or 'Unknown'}"""
+    
+    # Fall back to database
     try:
         async with async_session_factory() as session:
             search_term = f"%{patient_name}%"
@@ -79,6 +95,18 @@ async def get_patient_by_id(patient_id: str) -> str:
     
     patient_id = sanitize_query_input(patient_id)
     
+    # Check cache first
+    cache = get_session_cache()
+    if cache:
+        patient = cache.get_patient_by_id(patient_id)
+        if patient:
+            logger.info(f"[CACHE HIT] Found patient by ID in cache")
+            return f"""Patient: {patient['first_name']} {patient['last_name']}
+ID: {patient['patient_uid']}
+Status: {patient['status']}
+Primary Condition: {patient['primary_condition']}"""
+    
+    # Fall back to database
     try:
         async with async_session_factory() as session:
             query = select(Patient).where(
@@ -142,6 +170,17 @@ async def get_today_appointments() -> str:
     Returns:
         List of today's appointments with patient names and times
     """
+    # Check cache first
+    cache = get_session_cache()
+    if cache and cache.today_appointments:
+        logger.info(f"[CACHE HIT] Returning {len(cache.today_appointments)} appointments from cache")
+        lines = ["Today's Appointments:"]
+        for apt in cache.today_appointments:
+            time_str = datetime.fromisoformat(apt['scheduled_time']).strftime("%I:%M %p")
+            lines.append(f"- {time_str}: {apt['patient_name']} ({apt['type']})")
+        return "\n".join(lines)
+    
+    # Fall back to database
     async with async_session_factory() as session:
         today = datetime.now().date()
         tomorrow = today + timedelta(days=1)
@@ -236,6 +275,19 @@ async def get_active_alerts(limit: int = 5) -> str:
     Returns:
         List of active alerts with patient info and severity
     """
+    # Check cache first
+    cache = get_session_cache()
+    if cache and cache.active_alerts:
+        logger.info(f"[CACHE HIT] Returning {len(cache.active_alerts)} alerts from cache")
+        alerts = cache.active_alerts[:limit]
+        if not alerts:
+            return "No active alerts at this time."
+        lines = ["Active Alerts:"]
+        for alert in alerts:
+            lines.append(f"- [{alert['severity'].upper()}] {alert['patient_name']}: {alert['title']}")
+        return "\n".join(lines)
+    
+    # Fall back to database
     async with async_session_factory() as session:
         query = select(Alert).where(
             Alert.status == "pending"
@@ -269,20 +321,28 @@ async def get_my_caseload_summary() -> str:
     Returns:
         Summary of active patients and pending tasks
     """
+    # Check cache first
+    cache = get_session_cache()
+    if cache and cache.caseload_summary:
+        logger.info("[CACHE HIT] Returning caseload summary from cache")
+        s = cache.caseload_summary
+        return f"""Caseload Summary:
+- Active Patients: {s['active_patients']}
+- Active Alerts: {s['active_alerts']}
+- Pending Actions: {s['pending_actions']}"""
+    
+    # Fall back to database
     async with async_session_factory() as session:
-        # Count active patients
         patient_count = await session.execute(
             select(func.count(Patient.id)).where(Patient.status == "active")
         )
         active_patients = patient_count.scalar() or 0
         
-        # Count active alerts
         alert_count = await session.execute(
             select(func.count(Alert.id)).where(Alert.status == "pending")
         )
         active_alerts = alert_count.scalar() or 0
         
-        # Count pending agent actions
         action_count = await session.execute(
             select(func.count(AgentAction.id)).where(AgentAction.status == "pending")
         )
