@@ -1,9 +1,3 @@
-"""Voice agent security module.
-
-Provides input validation, sanitization, audit logging, and permission
-decorators for the MIRA voice agent.
-"""
-
 import json
 import re
 from datetime import datetime
