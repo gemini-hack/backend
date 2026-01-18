@@ -48,8 +48,7 @@ class Settings(BaseSettings):
     
     # Gemini AI
     GEMINI_API_KEY: str = ""
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-flash-latest"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # Storage (MinIO/S3)
     S3_ENDPOINT: str = "http://localhost:9000"
@@ -57,7 +56,16 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET_NAME: str = "mira-uploads"
     S3_REGION: str = "us-east-1"
+
+    # LiveKit (Voice AI)
+    LIVEKIT_URL: str = "wss://your-livekit-server.livekit.cloud"
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
+    GOOGLE_API_KEY: str = ""
     
+    # Dev only: Automatically dispatch agent when creating a room
+    ENABLE_AGENT_DISPATCH: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""
@@ -69,6 +77,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="ignore",
     )
 
 
