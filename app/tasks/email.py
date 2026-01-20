@@ -8,15 +8,12 @@ from app.db.database import async_session_factory
 def run_async(coro):
     """Run async code safely in Celery worker."""
     try:
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
     except RuntimeError:
-        loop = None
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     
-    if loop and loop.is_running():
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, coro).result()
-    else:
-        return asyncio.run(coro)
+    return loop.run_until_complete(coro)
 
 
 @celery_app.task(
