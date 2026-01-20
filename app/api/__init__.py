@@ -1,6 +1,16 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth_router, workers_router, patients_router, agents_router, caseload_router, voice_router
+from app.api.routes import (
+    auth_router, 
+    workers_router, 
+    patients_router, 
+    agents_router, 
+    caseload_router, 
+    voice_router,
+    calls_router,
+    livekit_webhooks_router,
+    twilio_webhooks_router,
+)
 
 # Main API router
 api_router = APIRouter()
@@ -12,3 +22,10 @@ api_router.include_router(patients_router)
 api_router.include_router(agents_router)
 api_router.include_router(caseload_router)
 api_router.include_router(voice_router)
+api_router.include_router(calls_router)
+
+# --- Webhooks ---
+api_router.include_router(livekit_webhooks_router)
+api_router.include_router(twilio_webhooks_router)
+
+

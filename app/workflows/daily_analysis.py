@@ -62,7 +62,12 @@ class DailyAnalysisWorkflow:
 
     async def _persist_actions(self, context):
         """Converts agent actions from context into database records."""
+        alert_count = 0
+        action_types_seen = set()
+        
         for action in context.final_actions:
+            action_types_seen.add(action.type)
+            
             # Create AgentAction record
             db_action = AgentAction(
                 patient_id=uuid.UUID(action.target_id),
@@ -85,7 +90,15 @@ class DailyAnalysisWorkflow:
                 "iit_recovery_plan"
             ]:
                 severity = AlertSeverity.URGENT
-            elif action.type == "defaulter_tracing":
+            elif action.type in [
+                "defaulter_tracing",
+                "engagement_nudge",
+                "onboarding_reminder",
+                "medication_reminder",
+                "appointment_reminder",
+                "schedule_checkin",
+                "low_level_viremia_review",
+            ]:
                 severity = AlertSeverity.WARNING
             
             if severity:
@@ -99,3 +112,8 @@ class DailyAnalysisWorkflow:
                     ai_assessment=action.details
                 )
                 self.db.add(alert)
+                alert_count += 1
+        
+        logger.info(f"Action types seen: {action_types_seen}")
+        logger.info(f"Created {alert_count} alerts from {len(context.final_actions)} actions")
+
