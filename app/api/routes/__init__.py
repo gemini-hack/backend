@@ -4,6 +4,9 @@ from app.api.routes.patients import router as patients_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.caseload import router as caseload_router
 from app.api.routes.voice import router as voice_router
+from app.api.routes.calls import router as calls_router
+from app.api.routes.livekit_webhooks import router as livekit_webhooks_router
+from app.api.routes.twilio_webhooks import router as twilio_webhooks_router
 
 __all__ = [
     "auth_router",
@@ -12,4 +15,9 @@ __all__ = [
     "agents_router",
     "caseload_router",
     "voice_router",
+    "calls_router",
+    "livekit_webhooks_router",
+    "twilio_webhooks_router",
 ]
+
+

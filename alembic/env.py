@@ -16,6 +16,7 @@ from app.models.patient import *
 from app.models.conditions import *
 from app.models.agent import *
 from app.models.template import *
+from app.models.call_session import *
 
 config = context.config
 

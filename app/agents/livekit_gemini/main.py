@@ -157,6 +157,55 @@ async def entrypoint(ctx: agents.JobContext):
              logger.info("Room disconnected")
              if not shutdown_future.done():
                  shutdown_future.set_result(None)
+        
+        # Handler for inbound SIP calls (patient calling in)
+        async def handle_participant_connected(participant):
+            """Handle new participant connections, especially SIP callers."""
+            identity = participant.identity
+            logger.info(f"Participant connected: {identity}")
+            
+            # Check if this is a SIP participant (inbound phone call)
+            if identity.startswith("sip_") or identity.startswith("patient-"):
+                logger.info(f"SIP participant detected: {identity}")
+                
+                # For inbound calls, try to extract phone and lookup patient
+                try:
+                    # Extract phone number from SIP identity
+                    # Format is typically sip_+1234567890 or similar
+                    phone_number = None
+                    if identity.startswith("sip_"):
+                        phone_number = identity.replace("sip_", "").split("@")[0]
+                    
+                    if phone_number:
+                        # Lookup patient by phone in database
+                        from app.db.database import async_session_factory
+                        from app.models import Patient
+                        
+                        async with async_session_factory() as db:
+                            patient = await Patient.query(db).filter(
+                                Patient.phone == phone_number
+                            ).first()
+                            
+                            if patient:
+                                # Set context for inbound call
+                                inbound_context = VoiceAgentUserContext(
+                                    user_id=patient.primary_physician_id,
+                                    organization_id=patient.organization_id,
+                                    role=None,  # Inbound call, no specific user role
+                                    full_name=f"Inbound: {patient.first_name} {patient.last_name}",
+                                )
+                                set_current_voice_context(inbound_context)
+                                logger.info(f"Set inbound call context for patient: {patient.id}")
+                            else:
+                                logger.warning(f"No patient found for phone: {phone_number}")
+                                
+                except Exception as e:
+                    logger.exception(f"Error handling SIP participant: {e}")
+
+        @ctx.room.on("participant_connected")
+        def on_participant_connected(participant):
+            """Sync wrapper that spawns async task for participant handling."""
+            asyncio.create_task(handle_participant_connected(participant))
 
         await shutdown_future
         logger.info("Agent disconnected from room.")

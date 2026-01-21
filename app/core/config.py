@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "Mira AI"
 
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://miraproject.online"
     
     # Gemini AI
     GEMINI_API_KEY: str = ""
@@ -65,6 +65,18 @@ class Settings(BaseSettings):
     
     # Dev only: Automatically dispatch agent when creating a room
     ENABLE_AGENT_DISPATCH: bool = True
+    
+    # LiveKit SIP (Phone Calls via Twilio)
+    LIVEKIT_SIP_ENABLED: bool = False
+    LIVEKIT_SIP_URI: str = ""
+    
+    # Twilio SIP Credentials
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_SIP_DOMAIN: str = "" 
+    TWILIO_PHONE_NUMBER: str = "" 
+    TWILIO_SIP_TRUNK_ID: str = ""  
+
 
     @property
     def cors_origins_list(self) -> list[str]:
