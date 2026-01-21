@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "Mira AI"
 
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "https://miraproject.online"
     
     # Gemini AI
     GEMINI_API_KEY: str = ""
