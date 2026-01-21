@@ -93,6 +93,7 @@ class Patient(BaseModel):
     monitoring_frequency: Mapped[str] = mapped_column(String(50), default="daily")
     preferred_contact_method: Mapped[CommunicationPreference] = mapped_column(Enum(CommunicationPreference), default=CommunicationPreference.SMS)
     preferred_contact_time: Mapped[str | None] = mapped_column(String(50))
+    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
     preferred_language: Mapped[str] = mapped_column(String(10), default="en")
     
     # Agent Settings

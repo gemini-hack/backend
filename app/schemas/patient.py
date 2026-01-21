@@ -41,6 +41,8 @@ class PatientCreate(PatientBase):
     
     monitoring_frequency: str = Field("daily", max_length=50)
     preferred_contact_method: CommunicationPreference = Field(CommunicationPreference.SMS)
+    preferred_contact_time: Optional[str] = Field(None, max_length=50)
+    timezone: str = Field("UTC", max_length=50)
     preferred_language: str = Field("en", max_length=10)
     
     # HIV Specific Initialization (Optional during patient creation)

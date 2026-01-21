@@ -2,7 +2,7 @@ import asyncio
 import concurrent.futures
 from app.celery_app import celery_app
 from app.utils.logger import logger
-from app.db.database import async_session_factory
+from app.db.database import get_celery_session
 
 
 def run_async(coro):
@@ -14,7 +14,6 @@ def run_async(coro):
         asyncio.set_event_loop(loop)
     
     return loop.run_until_complete(coro)
-
 
 @celery_app.task(
     bind=True,
@@ -33,7 +32,7 @@ def send_verification_email_task(self, to_email: str, token: str):
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending verification email to {to_email}")
     
     async def run_task():
-        async with async_session_factory() as session:
+        async with get_celery_session() as session:
             service = EmailService(session)
             await service.send_verification_email(to_email, token)
     
@@ -66,7 +65,7 @@ def send_invitation_email_task(
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending invitation email to {to_email}")
     
     async def run_task():
-        async with async_session_factory() as session:
+        async with get_celery_session() as session:
             service = EmailService(session)
             await service.send_invitation_email(
                 to_email, inviter_name, organization_name, invitation_link, expires_at_str
@@ -94,7 +93,7 @@ def send_password_reset_email_task(self, to_email: str, reset_token: str):
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending password reset email to {to_email}")
     
     async def run_task():
-        async with async_session_factory() as session:
+        async with get_celery_session() as session:
             service = EmailService(session)
             await service.send_password_reset_email(to_email, reset_token)
     
