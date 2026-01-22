@@ -283,7 +283,7 @@ class TwilioProvisioningService:
             
             request = CreateSIPOutboundTrunkRequest(trunk=trunk_info)
             
-            trunk = await lk_api.sip.create_sip_outbound_trunk(request)
+            trunk = await lk_api.sip.create_outbound_trunk(request)
             await lk_api.aclose()
             
             trunk_id = trunk.sip_trunk_id
@@ -318,7 +318,7 @@ class TwilioProvisioningService:
                 api_secret=settings.LIVEKIT_API_SECRET,
             )
             
-            await lk_api.sip.delete_sip_trunk(
+            await lk_api.sip.delete_trunk(
                 DeleteSIPTrunkRequest(sip_trunk_id=trunk_id)
             )
             await lk_api.aclose()
@@ -347,7 +347,7 @@ class TwilioProvisioningService:
                 api_secret=settings.LIVEKIT_API_SECRET,
             )
             
-            response = await lk_api.sip.list_sip_outbound_trunk(
+            response = await lk_api.sip.list_outbound_trunk(
                 ListSIPOutboundTrunkRequest()
             )
             await lk_api.aclose()
