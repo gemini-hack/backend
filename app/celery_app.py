@@ -72,16 +72,33 @@ celery_app.conf.update(
     task_routes={
         'app.tasks.email.*': {'queue': 'celery'},
         'app.tasks.analysis.*': {'queue': 'high_priority'},
+        'app.tasks.reminders.*': {'queue': 'celery'},
     },
+    
+    # Explicitly include the task modules
+    include=[
+        "app.tasks.email",
+        "app.tasks.analysis",
+        "app.tasks.reminders",
+    ]
 )
 
 # Auto-discover tasks from the tasks directory
 celery_app.autodiscover_tasks(["app.tasks"])
 
-# Set up the periodic schedule (Morning Rounds)
+# Set up the periodic schedule (Morning Rounds + Reminders)
 celery_app.conf.beat_schedule = {
+    "schedule-daily-reminders-at-5am": {
+        "task": "app.tasks.reminders.schedule_daily_reminders",
+        "schedule": crontab(hour=5, minute=0),
+    },
     "run-daily-analysis-at-6am": {
         "task": "app.tasks.analysis.run_daily_analysis",
         "schedule": crontab(hour=6, minute=0),
     },
+    "escalate-no-shows-at-7am": {
+        "task": "app.tasks.reminders.escalate_no_shows",
+        "schedule": crontab(hour=7, minute=0),
+    },
 }
+
