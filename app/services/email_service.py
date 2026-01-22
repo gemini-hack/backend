@@ -29,7 +29,10 @@ class EmailService:
         html_body = ""
 
         if self.db:
-            template = await EmailTemplate.query(self.db).filter(EmailTemplate.slug == slug).one_or_none()
+            # Use BaseModel's query builder
+            template = await EmailTemplate.query(self.db).filter(
+                EmailTemplate.slug == slug
+            ).one_or_none()
             if template:
                 subject_tmpl = Template(template.subject)
                 html_tmpl = Template(template.html_body)
