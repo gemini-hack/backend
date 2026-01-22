@@ -5,6 +5,7 @@ from app.agents.workers.hypertension import HypertensionWorker
 from app.agents.workers.disengagement import DisengagementWorker
 from app.agents.workers.hiv import HIVWorker
 from app.agents.workers.critic import CriticWorker
+from app.agents.workers.followup_specialist import FollowUpSpecialist
 from app.utils.logger import logger
 
 class AgentFactory:
@@ -19,7 +20,10 @@ class AgentFactory:
         # 1. Always include core health workers
         workers.append(DisengagementWorker())
         
-        # 2. Add disease-specific specialists
+        # 2. Always include appointment follow-up specialist (not disease-specific)
+        workers.append(FollowUpSpecialist(db))
+        
+        # 3. Add disease-specific specialists
         if "hypertension" in specializations:
             workers.append(HypertensionWorker(db))
             
@@ -28,3 +32,4 @@ class AgentFactory:
             
         logger.info(f"Factory assembled {len(workers)} specialists for specializations: {specializations}")
         return workers
+

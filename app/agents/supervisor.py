@@ -77,7 +77,7 @@ class SupervisorAgent(BaseSupervisor):
         
         prompt = (
             f"Here are the specialists' reports from the morning rounds for Organization {context.organization_id}:\n"
-            f"{json.dumps(reports, indent=2)}\n\n"
+            f"{json.dumps(reports, indent=2, default=str)}\n\n"
             "Produce a final list of actions for the patients. Each action should have: "
             "'type', 'target_id' (patient UUID), 'reasoning', 'confidence', and 'details' (dict). "
             "Available types: emergency_escalation, urgent_followup, schedule_checkin, engagement_nudge, onboarding_reminder, "
