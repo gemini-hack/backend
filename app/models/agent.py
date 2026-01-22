@@ -88,6 +88,9 @@ class AgentAction(BaseModel):
     ai_reasoning: Mapped[str | None] = mapped_column(Text)
     confidence_score: Mapped[float | None] = mapped_column(Float)
     
+    # Decision audit trail (full lineage: specialist → supervisor → critic)
+    decision_trace: Mapped[dict | None] = mapped_column(JSONB)
+    
     # Relationships
     patient = relationship("Patient", back_populates="agent_actions")
     organization = relationship("Organization")

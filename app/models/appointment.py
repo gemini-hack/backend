@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import String, DateTime, ForeignKey, Enum, Text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_model import BaseModel
 
@@ -25,7 +25,13 @@ class Appointment(BaseModel):
     status: Mapped[AppointmentStatus] = mapped_column(Enum(AppointmentStatus), default=AppointmentStatus.SCHEDULED)
     notes: Mapped[str | None] = mapped_column(Text)
     
+    # Priority & Escalation (0 = normal, higher = more urgent)
+    priority_level: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    no_show_count: Mapped[int] = mapped_column(Integer, default=0)
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    
     # Relationships
     patient = relationship("Patient")
     provider = relationship("User")
     organization = relationship("Organization")
+    reminders = relationship("AppointmentReminder", back_populates="appointment", cascade="all, delete-orphan")

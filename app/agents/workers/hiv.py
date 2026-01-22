@@ -29,12 +29,32 @@ class HIVWorker(BaseWorker):
         if not patients:
             return result
 
+        # Load hiv_profiles for HIV patients to avoid lazy loading in async context
+        from app.models.patient import Patient
+        from app.models.conditions import HIVProfile
+        hiv_patient_ids = [p.id for p in patients if p.primary_condition == Condition.HIV]
+        
+        if hiv_patient_ids:
+            # Eager load hiv_profiles
+            query = (
+                select(Patient)
+                .where(Patient.id.in_(hiv_patient_ids))
+                .options(selectinload(Patient.hiv_profile))
+            )
+            result_set = await self.db.execute(query)
+            loaded_patients = {p.id: p for p in result_set.scalars().all()}
+        else:
+            loaded_patients = {}
+
         for patient in patients:
             if patient.primary_condition != Condition.HIV:
                 continue
             
+            # Use the loaded patient with eager-loaded profile
+            loaded_patient = loaded_patients.get(patient.id, patient)
+            
             # Ensure hiv_profile is loaded (usually it is from Supervisor or Service)
-            profile = patient.hiv_profile
+            profile = loaded_patient.hiv_profile
             if not profile:
                 logger.warning(f"Patient {patient.id} has HIV as primary condition but no HIVProfile")
                 continue

@@ -148,3 +148,73 @@ class EmailService:
         logger.info(f"VERIFICATION LINK FOR {to_email}: {context['verify_link']}")
         
         await self._send(to_email, subject, html)
+
+    async def send_appointment_reminder(
+        self,
+        to_email: str,
+        patient_name: str,
+        appointment_time: str,
+        appointment_type: str,
+        provider_name: str | None = None,
+    ) -> bool:
+        """
+        Send appointment reminder email.
+        
+        Args:
+            to_email: Patient email address
+            patient_name: Patient's first name
+            appointment_time: Formatted appointment time string
+            appointment_type: Type of appointment (e.g., "Follow-up", "Lab Review")
+            provider_name: Optional provider/doctor name
+        
+        Returns:
+            True if sent successfully
+        """
+        context = {
+            "patient_name": patient_name,
+            "appointment_time": appointment_time,
+            "appointment_type": appointment_type,
+            "provider_name": provider_name or "your healthcare provider",
+            "app_name": settings.APP_NAME,
+        }
+        subject, html = await self._get_rendered_template("appointment_reminder", context)
+        
+        # Fallback if template not in DB
+        if not html:
+            subject = f"Appointment Reminder - {settings.APP_NAME}"
+            html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Appointment Reminder</h2>
+                <p>Hi {patient_name},</p>
+                <p>This is a reminder about your upcoming <strong>{appointment_type}</strong> appointment:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0;"><strong>Date & Time:</strong> {appointment_time}</p>
+                    <p style="margin: 5px 0 0 0;"><strong>With:</strong> {provider_name or "your healthcare provider"}</p>
+                </div>
+                <p>If you need to reschedule, please contact us as soon as possible.</p>
+                <p>Thank you,<br>{settings.APP_NAME} Team</p>
+            </div>
+            """
+        
+        await self._send(to_email, subject, html)
+        return True
+
+    async def send_no_show_followup(
+        self,
+        to_email: str,
+        patient_name: str,
+    ) -> bool:
+        """Send follow-up email after a no-show."""
+        subject = f"We missed you - {settings.APP_NAME}"
+        html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>We Missed You</h2>
+            <p>Hi {patient_name},</p>
+            <p>We noticed you weren't able to make your appointment. Your health is important to us!</p>
+            <p>Please reach out to reschedule at your earliest convenience.</p>
+            <p>Thank you,<br>{settings.APP_NAME} Team</p>
+        </div>
+        """
+        await self._send(to_email, subject, html)
+        return True
+

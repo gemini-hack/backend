@@ -10,6 +10,8 @@ from app.api.routes import (
     calls_router,
     livekit_webhooks_router,
     twilio_webhooks_router,
+    appointments_router,
+    reminders_router,
 )
 
 # Main API router
@@ -24,8 +26,10 @@ api_router.include_router(caseload_router)
 api_router.include_router(voice_router)
 api_router.include_router(calls_router)
 
+# --- Appointments and Reminders ---
+api_router.include_router(appointments_router)
+api_router.include_router(reminders_router)
+
 # --- Webhooks ---
 api_router.include_router(livekit_webhooks_router)
 api_router.include_router(twilio_webhooks_router)
-
-
