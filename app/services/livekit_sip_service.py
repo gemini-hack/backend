@@ -50,6 +50,7 @@ class LiveKitSIPService:
         patient_phone: str,
         session_id: str,
         metadata: dict,
+        org_phone_settings: dict | None = None,
     ) -> str:
         """
         Initiate an outbound SIP call to a patient via Twilio.
@@ -58,6 +59,8 @@ class LiveKitSIPService:
             patient_phone: Patient's phone number (E.164 format)
             session_id: Unique session identifier
             metadata: Call context
+            org_phone_settings: Optional org-specific phone settings with sip_trunk_id,
+                               phone_number. Falls back to global settings if not provided.
         
         Returns:
             Room name for tracking the call
@@ -68,11 +71,25 @@ class LiveKitSIPService:
                 "Set LIVEKIT_SIP_ENABLED=true and configure Twilio credentials."
             )
         
+        # Use org-specific settings or fall back to global
+        trunk_id = (
+            org_phone_settings.get("sip_trunk_id") 
+            if org_phone_settings else None
+        ) or self.trunk_id
+        
+        from_number = (
+            org_phone_settings.get("phone_number")
+            if org_phone_settings else None
+        ) or self.phone_number
+        
+        if not trunk_id:
+            raise ValueError("No SIP trunk configured for this organization")
+        
         room_name = f"call-{session_id}"
         
         # Add provider info to metadata
         metadata["sip_provider"] = "twilio"
-        metadata["from_number"] = self.from_number
+        metadata["from_number"] = from_number
         
         lk_api = self._get_api()
         try:
@@ -87,18 +104,10 @@ class LiveKitSIPService:
             logger.info(f"Created call room: {room_name}")
             
             # Create SIP participant to dial the patient via Twilio
-            # For Twilio, we typically use the SIP URI format: sip:number@domain
-            # Note: This assumes LiveKit is configured to accept outbound SIP
-            # requests that map to your Twilio trunk.
-            
-            # Construct SIP URI for Twilio
-            # Often maps to: sip:{phone}@{your-twilio-domain}
-            # Or if using direct trunking, LiveKit handles the trunk selection by ID
-            
             sip_request = api.CreateSIPParticipantRequest(
-                sip_trunk_id=self.trunk_id,
+                sip_trunk_id=trunk_id,
                 sip_call_to=patient_phone,
-                sip_number=self.phone_number,  # Caller ID / From number
+                sip_number=from_number,  # Caller ID / From number
                 room_name=room_name,
                 participant_identity=f"patient-{session_id}",
                 participant_name="Patient",
@@ -111,7 +120,7 @@ class LiveKitSIPService:
             )
             
             await lk_api.sip.create_sip_participant(sip_request)
-            logger.info(f"Twilio SIP call initiated to {patient_phone} from {self.phone_number}")
+            logger.info(f"Twilio SIP call initiated to {patient_phone} from {from_number}")
             
             return room_name
             
