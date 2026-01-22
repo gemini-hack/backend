@@ -7,6 +7,8 @@ from app.api.routes.voice import router as voice_router
 from app.api.routes.calls import router as calls_router
 from app.api.routes.livekit_webhooks import router as livekit_webhooks_router
 from app.api.routes.twilio_webhooks import router as twilio_webhooks_router
+from app.api.routes.appointments import router as appointments_router
+from app.api.routes.reminders import router as reminders_router
 
 __all__ = [
     "auth_router",
@@ -18,6 +20,6 @@ __all__ = [
     "calls_router",
     "livekit_webhooks_router",
     "twilio_webhooks_router",
+    "appointments_router",
+    "reminders_router",
 ]
-
-
