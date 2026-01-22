@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: str = "" 
     TWILIO_SIP_TRUNK_ID: str = ""  
 
+    # Reminder Rate Limits
+    MAX_SMS_PER_DAY_PER_ORG: int = 500
+    MAX_VOICE_CALLS_PER_DAY_PER_ORG: int = 50
+    REMINDER_RATE_LIMIT_KEY_PREFIX: str = "reminder_limit"
+
 
     @property
     def cors_origins_list(self) -> list[str]:
