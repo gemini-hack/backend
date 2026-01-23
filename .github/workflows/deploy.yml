@@ -25,11 +25,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             
-            # AGGRESSIVE CLEANUP: Remove all alembic versions and restore from git
-            # This ensures absolutely no junk files remain, even if git clean fails
-            echo "Aggressively cleaning alembic versions..."
-            rm -rf alembic/versions/*.py
-            git checkout HEAD -- alembic/versions/
+            # Remove any untracked files to ensure clean state
+            git clean -fd
             
             # Rebuild and restart containers
             echo "Rebuilding and restarting containers..."
