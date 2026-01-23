@@ -27,7 +27,6 @@ class AgentSettingsRequest(BaseModel):
     greeting: Optional[str] = Field(None, max_length=500)
     voice_style: Optional[VOICE_STYLES] = None
     language: Optional[str] = Field(None, max_length=10)
-    custom_instructions: Optional[str] = Field(None, max_length=2000)
     
     model_config = ConfigDict(
         json_schema_extra={
@@ -47,7 +46,6 @@ class AgentSettingsResponse(BaseModel):
     greeting: str = DEFAULT_GREETING
     voice_style: str = DEFAULT_VOICE_STYLE
     language: str = DEFAULT_LANGUAGE
-    custom_instructions: Optional[str] = None
     
     # Available options for the frontend
     available_voice_styles: list[str] = list(VOICE_STYLE_TO_GEMINI.keys())

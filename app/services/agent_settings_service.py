@@ -24,7 +24,6 @@ DEFAULT_AGENT_SETTINGS = {
     "greeting": DEFAULT_GREETING,
     "voice_style": DEFAULT_VOICE_STYLE,
     "language": DEFAULT_LANGUAGE,
-    "custom_instructions": None,
 }
 
 
@@ -56,7 +55,6 @@ class AgentSettingsService:
             "greeting": settings.get("greeting", DEFAULT_AGENT_SETTINGS["greeting"]),
             "voice_style": settings.get("voice_style", DEFAULT_AGENT_SETTINGS["voice_style"]),
             "language": settings.get("language", DEFAULT_AGENT_SETTINGS["language"]),
-            "custom_instructions": settings.get("custom_instructions"),
         }
     
     async def get_settings_cached(self, org_id: UUID) -> dict:
@@ -99,8 +97,6 @@ class AgentSettingsService:
             settings["voice_style"] = request.voice_style
         if request.language is not None:
             settings["language"] = request.language
-        if request.custom_instructions is not None:
-            settings["custom_instructions"] = request.custom_instructions
         
         org.agent_settings = settings
         flag_modified(org, "agent_settings")
