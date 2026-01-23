@@ -1,5 +1,5 @@
 from app.models.patient import Patient, HealthReading
-from app.models.user import User, Organization
+from app.models.user import User, Organization, Team
 from app.models.agent import Alert, AgentAction, ScheduledCheck
 from app.models.conditions import Condition, HIVProfile, HypertensionProfile, DiabetesProfile
 from app.models.appointment import Appointment, AppointmentStatus
@@ -11,6 +11,7 @@ __all__ = [
     "HealthReading",
     "User",
     "Organization",
+    "Team",
     "Alert",
     "AgentAction",
     "ScheduledCheck",

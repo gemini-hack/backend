@@ -38,8 +38,33 @@ class Organization(BaseModel):
     
     # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
+    teams = relationship("Team", back_populates="organization", cascade="all, delete-orphan")
     invitations = relationship("Invitation", back_populates="organization", cascade="all, delete-orphan")
     patients = relationship("Patient", back_populates="organization", cascade="all, delete-orphan")
+
+
+class Team(BaseModel):
+    """Team/Department within an organization (e.g., Psychiatry, Surgery)."""
+    __tablename__ = "teams"
+    
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    # Relationships
+    organization = relationship("Organization", back_populates="teams")
+    members = relationship("User", back_populates="team", foreign_keys="User.team_id")
+    patients = relationship("Patient", back_populates="team")
+    invitations = relationship("Invitation", back_populates="team", foreign_keys="Invitation.team_id")
+    
+    __table_args__ = (
+        Index("idx_teams_org_name", "organization_id", "name", unique=True),
+    )
 
 
 class User(BaseModel):
@@ -48,6 +73,7 @@ class User(BaseModel):
     
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="SET NULL"), index=True)
     
     # Identity
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
@@ -78,11 +104,13 @@ class User(BaseModel):
     
     # Relationships
     organization = relationship("Organization", back_populates="users")
+    team = relationship("Team", back_populates="members", foreign_keys=[team_id])
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     sent_invitations = relationship("Invitation", back_populates="invited_by_user", foreign_keys="Invitation.invited_by")
     
     __table_args__ = (
         Index("idx_users_org_role", "organization_id", "role"),
+        Index("idx_users_team", "team_id"),
     )
     
     @property
@@ -128,6 +156,7 @@ class Invitation(BaseModel):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
     invited_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="SET NULL"), index=True)
     
     email: Mapped[str] = mapped_column(String(255), index=True)
     first_name: Mapped[str | None] = mapped_column(String(100))
@@ -142,6 +171,7 @@ class Invitation(BaseModel):
     
     # Relationships
     organization = relationship("Organization", back_populates="invitations")
+    team = relationship("Team", back_populates="invitations", foreign_keys=[team_id])
     invited_by_user = relationship("User", back_populates="sent_invitations", foreign_keys=[invited_by])
 
 

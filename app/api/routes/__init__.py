@@ -11,6 +11,7 @@ from app.api.routes.appointments import router as appointments_router
 from app.api.routes.reminders import router as reminders_router
 from app.api.routes.onboarding import router as onboarding_router
 from app.api.routes.settings import router as settings_router
+from app.api.routes.teams import router as teams_router
 
 __all__ = [
     "auth_router",
@@ -26,4 +27,6 @@ __all__ = [
     "reminders_router",
     "onboarding_router",
     "settings_router",
+    "teams_router",
 ]
+

@@ -68,6 +68,7 @@ class UserService(BaseService):
             existing_invitation.first_name = data.first_name
             existing_invitation.last_name = data.last_name
             existing_invitation.role = data.role
+            existing_invitation.team_id = data.team_id  # Update team assignment
             existing_invitation.token = generate_token(64)
             existing_invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
             existing_invitation.invited_by = inviter.id
@@ -79,6 +80,7 @@ class UserService(BaseService):
                 first_name=data.first_name,
                 last_name=data.last_name,
                 role=data.role,
+                team_id=data.team_id,  # Include team assignment
                 organization_id=inviter.organization_id,
                 invited_by=inviter.id,
                 token=generate_token(64),
@@ -111,7 +113,26 @@ class UserService(BaseService):
         
         logger.info(f"Invitation sent to {data.email} by {inviter.email}")
         
-        return InvitationResponse.model_validate(invitation)
+        # Build response with team name if applicable
+        team_name = None
+        if invitation.team_id:
+            from app.models.user import Team
+            team = await Team.fetch_by_id(self.db, invitation.team_id)
+            if team:
+                team_name = team.name
+        
+        return InvitationResponse(
+            id=invitation.id,
+            email=invitation.email,
+            first_name=invitation.first_name,
+            last_name=invitation.last_name,
+            role=invitation.role,
+            team_id=invitation.team_id,
+            team_name=team_name,
+            status=invitation.status.value,
+            expires_at=invitation.expires_at,
+            created_at=invitation.created_at,
+        )
     
     async def get_invitation_details(self, token: str) -> InvitationDetailsResponse:
         """Get invitation details for the accept page."""
@@ -130,6 +151,14 @@ class UserService(BaseService):
         if invitation.expires_at < datetime.now(timezone.utc):
             raise InvitationExpiredException()
         
+        # Get team name if applicable
+        team_name = None
+        if invitation.team_id:
+            from app.models.user import Team
+            team = await Team.fetch_by_id(self.db, invitation.team_id)
+            if team:
+                team_name = team.name
+        
         return InvitationDetailsResponse(
             email=invitation.email,
             first_name=invitation.first_name,
@@ -137,6 +166,8 @@ class UserService(BaseService):
             role=invitation.role,
             organization_name=invitation.organization.name,
             inviter_name=f"{invitation.invited_by_user.first_name} {invitation.invited_by_user.last_name}",
+            team_id=invitation.team_id,
+            team_name=team_name,
             expires_at=invitation.expires_at,
         )
     
@@ -171,7 +202,7 @@ class UserService(BaseService):
             await self.db.commit()
             raise UserAlreadyExistsException("A user with this email already exists")
         
-        # Create user
+        # Create user with team assignment from invitation
         user = User(
             email=invitation.email,
             password_hash=hash_password(password),
@@ -179,6 +210,7 @@ class UserService(BaseService):
             last_name=invitation.last_name or "",
             role=invitation.role,
             organization_id=invitation.organization_id,
+            team_id=invitation.team_id,  # Assign to team from invitation
             is_active=True,
             email_verified=True,  # Email verified since they received invitation
         )
@@ -258,7 +290,31 @@ class UserService(BaseService):
         result = await self.db.execute(query)
         invitations = result.scalars().all()
         
-        return [InvitationResponse.model_validate(inv) for inv in invitations]
+        # Build responses with team names
+        responses = []
+        from app.models.user import Team
+        
+        for inv in invitations:
+            team_name = None
+            if inv.team_id:
+                team = await Team.fetch_by_id(self.db, inv.team_id)
+                if team:
+                    team_name = team.name
+            
+            responses.append(InvitationResponse(
+                id=inv.id,
+                email=inv.email,
+                first_name=inv.first_name,
+                last_name=inv.last_name,
+                role=inv.role,
+                team_id=inv.team_id,
+                team_name=team_name,
+                status=inv.status.value,
+                expires_at=inv.expires_at,
+                created_at=inv.created_at,
+            ))
+        
+        return responses
     
     async def revoke_invitation(
         self,
