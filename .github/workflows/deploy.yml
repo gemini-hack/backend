@@ -24,8 +24,12 @@ jobs:
             echo "Syncing with remote..."
             git fetch origin main
             git reset --hard origin/main
-            # Remove any untracked files (like junk migrations)
-            git clean -fd
+            
+            # AGGRESSIVE CLEANUP: Remove all alembic versions and restore from git
+            # This ensures absolutely no junk files remain, even if git clean fails
+            echo "Aggressively cleaning alembic versions..."
+            rm -rf alembic/versions/*.py
+            git checkout HEAD -- alembic/versions/
             
             # Rebuild and restart containers
             echo "Rebuilding and restarting containers..."
