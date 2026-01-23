@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.celery_app import celery_app
 from app.db.database import get_celery_session
 from app.models import Patient, CallSession, CallType, CallStatus, Alert
+from app.models.user import Organization
 from app.models.agent import AlertSeverity
 from app.models.patient import CommunicationPreference
 from app.services.livekit_sip_service import LiveKitSIPService
@@ -93,6 +94,10 @@ async def _trigger_call_async(
                 logger.warning("SIP calling is not enabled or configured")
                 return None
             
+            # Fetch org phone settings for per-org SIP trunk
+            org = await db.get(Organization, patient.organization_id)
+            org_phone_settings = org.phone_settings if org else None
+            
             # Generate session ID
             session_id = str(uuid.uuid4())
             room_name = f"call-{session_id}"
@@ -128,6 +133,7 @@ async def _trigger_call_async(
                     patient_phone=patient.phone,
                     session_id=session_id,
                     metadata=metadata,
+                    org_phone_settings=org_phone_settings,
                 )
                 
                 # Update status to ringing

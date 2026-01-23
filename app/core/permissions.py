@@ -31,6 +31,10 @@ PERM_CASELOAD_ASSIGN = "caseload:assign"
 PERM_CASELOAD_VIEW = "caseload:view" 
 PERM_WORKER_STATUS_UPDATE = "workers:status" 
 
+PERM_SETTINGS_READ = "settings:read"
+PERM_SETTINGS_UPDATE = "settings:update"
+PERM_ONBOARDING_COMPLETE = "onboarding:complete"
+
 # Role Permission Mappings
 ROLE_PERMISSIONS = {
     UserRole.ORG_OWNER: ["*"],  # Super admin for the organization

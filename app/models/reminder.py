@@ -99,11 +99,17 @@ class AppointmentReminder(BaseModel):
         error: Optional[str] = None
     ) -> None:
         """Record an attempt for a specific channel."""
+        existing = self.attempts.get(channel.value, {})
+        retry_count = existing.get("retry_count", 0)
+        if status == "failed":
+            retry_count += 1
+        
         self.attempts[channel.value] = {
             "sent_at": datetime.now().isoformat(),
             "status": status,
             "message_id": message_id,
             "error": error,
+            "retry_count": retry_count,
         }
     
     def get_next_channel(self) -> Optional[ReminderChannel]:

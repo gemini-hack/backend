@@ -3,6 +3,7 @@ import concurrent.futures
 from app.celery_app import celery_app
 from app.utils.logger import logger
 from app.db.database import get_celery_session
+from app.services.email_service import EmailService
 
 
 def run_async(coro):
@@ -27,8 +28,6 @@ def run_async(coro):
 )
 def send_verification_email_task(self, to_email: str, token: str):
     """Send verification email. Failed messages go to DLQ."""
-    from app.services.email_service import EmailService
-    
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending verification email to {to_email}")
     
     async def run_task():
@@ -60,8 +59,6 @@ def send_invitation_email_task(
     expires_at_str: str
 ):
     """Send invitation email. Failed messages go to DLQ."""
-    from app.services.email_service import EmailService
-    
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending invitation email to {to_email}")
     
     async def run_task():
@@ -88,8 +85,6 @@ def send_invitation_email_task(
 )
 def send_password_reset_email_task(self, to_email: str, reset_token: str):
     """Send password reset email. Failed messages go to DLQ."""
-    from app.services.email_service import EmailService
-    
     logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending password reset email to {to_email}")
     
     async def run_task():

@@ -10,6 +10,7 @@ from livekit.plugins import google, silero
 
 from app.utils.logger import logger
 
+from app.core.config import settings
 from .tools import MIRA_TOOLS
 from .voice_context import VoiceAgentUserContext, set_current_voice_context, clear_voice_context
 from .session_cache import preload_session_data, set_session_cache, clear_session_cache
@@ -222,7 +223,7 @@ if __name__ == "__main__":
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
             worker_type=agents.WorkerType.ROOM,
-            agent_name="mira-voice-agent",
+            agent_name=settings.VOICE_AGENT_NAME,
             load_threshold=0.99,
         )
     )
