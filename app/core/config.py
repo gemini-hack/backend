@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     
     # Dev only: Automatically dispatch agent when creating a room
     ENABLE_AGENT_DISPATCH: bool = True
-    
+    VOICE_AGENT_NAME: str = "Mira-voice agent"
     # LiveKit SIP (Phone Calls via Twilio)
     LIVEKIT_SIP_ENABLED: bool = False
     LIVEKIT_SIP_URI: str = ""
