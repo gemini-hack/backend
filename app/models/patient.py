@@ -57,6 +57,7 @@ class Patient(BaseModel):
     
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id", ondelete="SET NULL"), index=True)
     
     patient_uid: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     
@@ -110,6 +111,7 @@ class Patient(BaseModel):
     
     # Relationships
     organization = relationship("Organization", back_populates="patients")
+    team = relationship("Team", back_populates="patients")
     primary_physician = relationship("User", foreign_keys=[primary_physician_id])
     assigned_nurse = relationship("User", foreign_keys=[assigned_nurse_id])
     care_coordinator = relationship("User", foreign_keys=[care_coordinator_id])

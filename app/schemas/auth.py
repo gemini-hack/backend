@@ -344,6 +344,7 @@ class InviteWorkerRequest(BaseModel):
     first_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
     role: UserRole = Field(...)
+    team_id: Optional[UUID] = None  # Optional team assignment
     
     @field_validator("role")
     @classmethod
@@ -358,7 +359,8 @@ class InviteWorkerRequest(BaseModel):
                 "email": "nurse@stmarys.com",
                 "first_name": "Sarah",
                 "last_name": "Johnson",
-                "role": "nurse"
+                "role": "nurse",
+                "team_id": "123e4567-e89b-12d3-a456-426614174000"
             }
         }
     )
@@ -371,6 +373,8 @@ class InvitationResponse(BaseModel):
     first_name: Optional[str]
     last_name: Optional[str]
     role: UserRole
+    team_id: Optional[UUID] = None
+    team_name: Optional[str] = None
     status: str
     expires_at: datetime
     created_at: datetime
@@ -384,6 +388,8 @@ class InvitationResponse(BaseModel):
                 "first_name": "Sarah",
                 "last_name": "Johnson",
                 "role": "nurse",
+                "team_id": "123e4567-e89b-12d3-a456-426614174000",
+                "team_name": "Psychiatry",
                 "status": "pending",
                 "expires_at": "2024-01-17T10:00:00Z",
                 "created_at": "2024-01-10T10:00:00Z"
@@ -400,6 +406,8 @@ class InvitationDetailsResponse(BaseModel):
     role: UserRole
     organization_name: str
     inviter_name: str
+    team_id: Optional[UUID] = None
+    team_name: Optional[str] = None
     expires_at: datetime
     
     model_config = ConfigDict(
@@ -411,6 +419,8 @@ class InvitationDetailsResponse(BaseModel):
                 "role": "nurse",
                 "organization_name": "St. Mary's Hospital",
                 "inviter_name": "Jane Doe",
+                "team_id": "123e4567-e89b-12d3-a456-426614174000",
+                "team_name": "Psychiatry",
                 "expires_at": "2024-01-17T10:00:00Z"
             }
         }

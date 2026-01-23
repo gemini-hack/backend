@@ -14,6 +14,7 @@ from app.api.routes import (
     reminders_router,
     onboarding_router,
     settings_router,
+    teams_router,
 )
 
 # Main API router
@@ -28,6 +29,9 @@ api_router.include_router(caseload_router)
 api_router.include_router(voice_router)
 api_router.include_router(calls_router)
 
+# --- Teams ---
+api_router.include_router(teams_router)
+
 # --- Appointments and Reminders ---
 api_router.include_router(appointments_router)
 api_router.include_router(reminders_router)
@@ -39,3 +43,4 @@ api_router.include_router(settings_router)
 # --- Webhooks ---
 api_router.include_router(livekit_webhooks_router)
 api_router.include_router(twilio_webhooks_router)
+
