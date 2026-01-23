@@ -20,9 +20,12 @@ jobs:
             # Navigate to the project directory
             cd ~/mira-ai || exit 1
             
-            # Pull the latest changes
-            echo "Pulling latest changes..."
-            git pull origin main
+            # Pull the latest changes and force alignment with remote
+            echo "Syncing with remote..."
+            git fetch origin main
+            git reset --hard origin/main
+            # Remove any untracked files (like junk migrations)
+            git clean -fd
             
             # Rebuild and restart containers
             echo "Rebuilding and restarting containers..."
