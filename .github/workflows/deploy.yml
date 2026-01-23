@@ -1,0 +1,39 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script_stop: true
+          script: |
+            # Navigate to the project directory
+            cd ~/mira-ai || exit 1
+            
+            # Pull the latest changes
+            echo "Pulling latest changes..."
+            git pull origin main
+            
+            # Rebuild and restart containers
+            echo "Rebuilding and restarting containers..."
+            docker compose -f compose.yml up -d --build --force-recreate
+            
+            # Run Migrations
+            echo "Running database migrations..."
+            docker compose -f compose.yml exec -T app alembic upgrade head
+            
+            # Seed Templates (Idempotent)
+            echo "Seeding email templates..."
+            docker compose -f compose.yml exec -T app python scripts/seed_templates.py
+            
+            echo "Deployment completed successfully!"
