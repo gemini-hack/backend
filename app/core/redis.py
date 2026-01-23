@@ -182,3 +182,48 @@ class SessionStore:
                 continue
         
         return sessions
+
+
+class AgentSettingsCache:
+    """Cache for agent settings per organization."""
+    
+    KEY_PREFIX = "agent_settings"
+    TTL_SECONDS = 3600  # 1 hour
+    
+    @classmethod
+    def _make_key(cls, org_id: str | UUID) -> str:
+        return f"{cls.KEY_PREFIX}:{org_id}"
+    
+    @classmethod
+    async def get(cls, org_id: str | UUID) -> Optional[dict]:
+        """Get cached agent settings for an organization."""
+        try:
+            redis = RedisManager.get_client()
+            key = cls._make_key(org_id)
+            data = await redis.get(key)
+            if data:
+                return json.loads(data)
+            return None
+        except Exception as e:
+            logger.warning(f"AgentSettingsCache get failed: {e}")
+            return None
+    
+    @classmethod
+    async def set(cls, org_id: str | UUID, settings: dict) -> None:
+        """Cache agent settings for an organization."""
+        try:
+            redis = RedisManager.get_client()
+            key = cls._make_key(org_id)
+            await redis.setex(key, cls.TTL_SECONDS, json.dumps(settings))
+        except Exception as e:
+            logger.warning(f"AgentSettingsCache set failed: {e}")
+    
+    @classmethod
+    async def invalidate(cls, org_id: str | UUID) -> None:
+        """Invalidate cached agent settings for an organization."""
+        try:
+            redis = RedisManager.get_client()
+            key = cls._make_key(org_id)
+            await redis.delete(key)
+        except Exception as e:
+            logger.warning(f"AgentSettingsCache invalidate failed: {e}")
