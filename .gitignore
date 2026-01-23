@@ -78,7 +78,7 @@ dmypy.json
 
 # Alembic
 alembic/versions/__pycache__/
-alembic/versions
+
 # Ruff / linting
 .ruff_cache/
 
