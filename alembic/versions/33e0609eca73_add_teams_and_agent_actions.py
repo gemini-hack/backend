@@ -50,46 +50,11 @@ def upgrade() -> None:
     op.create_index(op.f('ix_invitations_team_id'), 'invitations', ['team_id'], unique=False)
     op.create_foreign_key(None, 'invitations', 'teams', ['team_id'], ['id'], ondelete='SET NULL')
 
-    # ### Agent Actions Table ###
-    op.create_table('agent_actions',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('triggered_by_reading_id', sa.Uuid(), nullable=True),
-    sa.Column('triggered_by_alert_id', sa.Uuid(), nullable=True),
-    sa.Column('action_type', sa.String(length=50), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('content', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('recipient', sa.String(length=255), nullable=True),
-    sa.Column('scheduled_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('executed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('result', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('error_message', sa.Text(), nullable=True),
-    sa.Column('retry_count', sa.Integer(), nullable=False),
-    sa.Column('ai_reasoning', sa.Text(), nullable=True),
-    sa.Column('confidence_score', sa.Float(), nullable=True),
-    sa.Column('decision_trace', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['triggered_by_alert_id'], ['alerts.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['triggered_by_reading_id'], ['health_readings.id'], ondelete='SET NULL'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_agent_actions_action_type'), 'agent_actions', ['action_type'], unique=False)
-    op.create_index(op.f('ix_agent_actions_organization_id'), 'agent_actions', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_agent_actions_patient_id'), 'agent_actions', ['patient_id'], unique=False)
-    op.create_index(op.f('ix_agent_actions_status'), 'agent_actions', ['status'], unique=False)
+
 
 
 def downgrade() -> None:
-    # ### Downgrade Agent Actions ###
-    op.drop_index(op.f('ix_agent_actions_status'), table_name='agent_actions')
-    op.drop_index(op.f('ix_agent_actions_patient_id'), table_name='agent_actions')
-    op.drop_index(op.f('ix_agent_actions_organization_id'), table_name='agent_actions')
-    op.drop_index(op.f('ix_agent_actions_action_type'), table_name='agent_actions')
-    op.drop_table('agent_actions')
+
 
     # ### Downgrade Teams Feature ###
     op.drop_constraint(None, 'invitations', type_='foreignkey')
