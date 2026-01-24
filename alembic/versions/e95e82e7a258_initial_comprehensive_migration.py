@@ -1,8 +1,8 @@
-"""initial_with_teams
+"""Initial comprehensive migration
 
-Revision ID: 33e0609eca73
+Revision ID: e95e82e7a258
 Revises: 
-Create Date: 2026-01-23 18:06:04.890712
+Create Date: 2026-01-12 11:08:01.305766
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '33e0609eca73'
+revision: str = 'e95e82e7a258'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -47,23 +47,9 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('teams',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('description', sa.Text(), nullable=True),
-    sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('idx_teams_org_name', 'teams', ['organization_id', 'name'], unique=True)
-    op.create_index(op.f('ix_teams_organization_id'), 'teams', ['organization_id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('team_id', sa.Uuid(), nullable=True),
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=False),
     sa.Column('first_name', sa.String(length=100), nullable=False),
@@ -82,14 +68,11 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_users_org_role', 'users', ['organization_id', 'role'], unique=False)
-    op.create_index('idx_users_team', 'users', ['team_id'], unique=False)
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     op.create_index(op.f('ix_users_organization_id'), 'users', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_users_team_id'), 'users', ['team_id'], unique=False)
     op.create_table('audit_logs',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('user_id', sa.Uuid(), nullable=True),
@@ -125,7 +108,6 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('organization_id', sa.Uuid(), nullable=False),
     sa.Column('invited_by', sa.Uuid(), nullable=False),
-    sa.Column('team_id', sa.Uuid(), nullable=True),
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('first_name', sa.String(length=100), nullable=True),
     sa.Column('last_name', sa.String(length=100), nullable=True),
@@ -138,12 +120,10 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['invited_by'], ['users.id'], ),
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_invitations_email'), 'invitations', ['email'], unique=False)
     op.create_index(op.f('ix_invitations_organization_id'), 'invitations', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_invitations_team_id'), 'invitations', ['team_id'], unique=False)
     op.create_index(op.f('ix_invitations_token'), 'invitations', ['token'], unique=True)
     op.create_table('password_reset_tokens',
     sa.Column('id', sa.Uuid(), nullable=False),
@@ -161,7 +141,6 @@ def upgrade() -> None:
     op.create_table('patients',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('team_id', sa.Uuid(), nullable=True),
     sa.Column('patient_uid', sa.String(length=50), nullable=False),
     sa.Column('first_name', sa.String(length=100), nullable=False),
     sa.Column('last_name', sa.String(length=100), nullable=False),
@@ -185,11 +164,22 @@ def upgrade() -> None:
     sa.Column('monitoring_frequency', sa.String(length=50), nullable=False),
     sa.Column('preferred_contact_method', sa.Enum('SMS', 'CALL', 'EMAIL', 'IN_APP', name='communicationpreference'), nullable=False),
     sa.Column('preferred_contact_time', sa.String(length=50), nullable=True),
-    sa.Column('timezone', sa.String(length=50), nullable=False),
     sa.Column('preferred_language', sa.String(length=10), nullable=False),
     sa.Column('agent_enabled', sa.Boolean(), nullable=False),
     sa.Column('auto_call_enabled', sa.Boolean(), nullable=False),
     sa.Column('alert_thresholds', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('date_of_diagnosis', sa.Date(), nullable=True),
+    sa.Column('art_start_date', sa.Date(), nullable=True),
+    sa.Column('baseline_viral_load', sa.Integer(), nullable=True),
+    sa.Column('baseline_cd4_count', sa.Integer(), nullable=True),
+    sa.Column('initial_art_regimen', sa.String(length=255), nullable=True),
+    sa.Column('current_art_regimen', sa.String(length=255), nullable=True),
+    sa.Column('last_refill_date', sa.Date(), nullable=True),
+    sa.Column('refill_months', sa.Integer(), nullable=True),
+    sa.Column('next_refill_date', sa.Date(), nullable=True),
+    sa.Column('last_viral_load_sample_date', sa.Date(), nullable=True),
+    sa.Column('last_viral_load_result_date', sa.Date(), nullable=True),
+    sa.Column('last_viral_load_result', sa.Integer(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('tags', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('custom_fields', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -201,7 +191,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['care_coordinator_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['primary_physician_id'], ['users.id'], ondelete='SET NULL'),
-    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_patients_last_reading', 'patients', ['last_reading_at'], unique=False)
@@ -209,7 +198,6 @@ def upgrade() -> None:
     op.create_index('idx_patients_status', 'patients', ['status'], unique=False)
     op.create_index(op.f('ix_patients_organization_id'), 'patients', ['organization_id'], unique=False)
     op.create_index(op.f('ix_patients_patient_uid'), 'patients', ['patient_uid'], unique=True)
-    op.create_index(op.f('ix_patients_team_id'), 'patients', ['team_id'], unique=False)
     op.create_table('refresh_tokens',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('user_id', sa.Uuid(), nullable=False),
@@ -227,84 +215,6 @@ def upgrade() -> None:
     op.create_index('idx_refresh_tokens_expires', 'refresh_tokens', ['expires_at'], unique=False)
     op.create_index(op.f('ix_refresh_tokens_token'), 'refresh_tokens', ['token'], unique=True)
     op.create_index(op.f('ix_refresh_tokens_user_id'), 'refresh_tokens', ['user_id'], unique=False)
-    op.create_table('appointments',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('provider_id', sa.Uuid(), nullable=True),
-    sa.Column('scheduled_time', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('type', sa.String(length=100), nullable=False),
-    sa.Column('status', sa.Enum('SCHEDULED', 'COMPLETED', 'CANCELLED', 'NO_SHOW', name='appointmentstatus'), nullable=False),
-    sa.Column('notes', sa.Text(), nullable=True),
-    sa.Column('priority_level', sa.Integer(), nullable=False),
-    sa.Column('no_show_count', sa.Integer(), nullable=False),
-    sa.Column('reminder_sent_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['provider_id'], ['users.id'], ondelete='SET NULL'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_appointments_organization_id'), 'appointments', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_appointments_patient_id'), 'appointments', ['patient_id'], unique=False)
-    op.create_index(op.f('ix_appointments_priority_level'), 'appointments', ['priority_level'], unique=False)
-    op.create_index(op.f('ix_appointments_scheduled_time'), 'appointments', ['scheduled_time'], unique=False)
-    op.create_table('call_sessions',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('room_name', sa.String(length=100), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('triggered_by_id', sa.Uuid(), nullable=True),
-    sa.Column('call_type', sa.Enum('OUTBOUND_REMINDER', 'OUTBOUND_FOLLOWUP', 'OUTBOUND_ALERT', 'OUTBOUND_MANUAL', 'INBOUND', name='calltype'), nullable=False),
-    sa.Column('status', sa.Enum('INITIATED', 'RINGING', 'ANSWERED', 'COMPLETED', 'FAILED', 'NO_ANSWER', 'BUSY', 'CANCELLED', name='callstatus'), nullable=False),
-    sa.Column('from_number', sa.String(length=20), nullable=False),
-    sa.Column('to_number', sa.String(length=20), nullable=False),
-    sa.Column('started_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('answered_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('ended_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('duration_seconds', sa.Integer(), nullable=True),
-    sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('transcript', sa.Text(), nullable=True),
-    sa.Column('summary', sa.Text(), nullable=True),
-    sa.Column('outcome', sa.String(length=100), nullable=True),
-    sa.Column('error_message', sa.Text(), nullable=True),
-    sa.Column('retry_count', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['triggered_by_id'], ['users.id'], ondelete='SET NULL'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('idx_call_sessions_call_type', 'call_sessions', ['call_type'], unique=False)
-    op.create_index('idx_call_sessions_started_at', 'call_sessions', ['started_at'], unique=False)
-    op.create_index('idx_call_sessions_status', 'call_sessions', ['status'], unique=False)
-    op.create_index(op.f('ix_call_sessions_organization_id'), 'call_sessions', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_call_sessions_patient_id'), 'call_sessions', ['patient_id'], unique=False)
-    op.create_index(op.f('ix_call_sessions_room_name'), 'call_sessions', ['room_name'], unique=True)
-    op.create_table('diabetes_profiles',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('date_of_diagnosis', sa.Date(), nullable=True),
-    sa.Column('diabetes_type', sa.String(length=20), nullable=True),
-    sa.Column('baseline_hba1c', sa.Float(), nullable=True),
-    sa.Column('target_hba1c', sa.Float(), nullable=True),
-    sa.Column('baseline_fasting_glucose', sa.Float(), nullable=True),
-    sa.Column('target_fasting_glucose', sa.Float(), nullable=True),
-    sa.Column('current_treatment', sa.String(length=255), nullable=True),
-    sa.Column('insulin_regimen', sa.String(length=255), nullable=True),
-    sa.Column('last_hba1c_date', sa.Date(), nullable=True),
-    sa.Column('last_hba1c_result', sa.Float(), nullable=True),
-    sa.Column('last_eye_exam_date', sa.Date(), nullable=True),
-    sa.Column('last_foot_exam_date', sa.Date(), nullable=True),
-    sa.Column('last_kidney_function_date', sa.Date(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_diabetes_profiles_patient_id'), 'diabetes_profiles', ['patient_id'], unique=True)
     op.create_table('health_readings',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('patient_id', sa.Uuid(), nullable=False),
@@ -335,48 +245,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_health_readings_patient_id'), 'health_readings', ['patient_id'], unique=False)
     op.create_index(op.f('ix_health_readings_reading_time'), 'health_readings', ['reading_time'], unique=False)
     op.create_index(op.f('ix_health_readings_reading_type'), 'health_readings', ['reading_type'], unique=False)
-    op.create_table('hiv_profiles',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('date_of_diagnosis', sa.Date(), nullable=True),
-    sa.Column('art_start_date', sa.Date(), nullable=True),
-    sa.Column('baseline_viral_load', sa.Integer(), nullable=True),
-    sa.Column('baseline_cd4_count', sa.Integer(), nullable=True),
-    sa.Column('initial_art_regimen', sa.String(length=255), nullable=True),
-    sa.Column('current_art_regimen', sa.String(length=255), nullable=True),
-    sa.Column('last_refill_date', sa.Date(), nullable=True),
-    sa.Column('refill_months', sa.Integer(), nullable=True),
-    sa.Column('next_refill_date', sa.Date(), nullable=True),
-    sa.Column('last_viral_load_sample_date', sa.Date(), nullable=True),
-    sa.Column('last_viral_load_result_date', sa.Date(), nullable=True),
-    sa.Column('last_viral_load_result', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_hiv_profiles_patient_id'), 'hiv_profiles', ['patient_id'], unique=True)
-    op.create_table('hypertension_profiles',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('date_of_diagnosis', sa.Date(), nullable=True),
-    sa.Column('baseline_systolic', sa.Integer(), nullable=True),
-    sa.Column('baseline_diastolic', sa.Integer(), nullable=True),
-    sa.Column('target_systolic', sa.Integer(), nullable=True),
-    sa.Column('target_diastolic', sa.Integer(), nullable=True),
-    sa.Column('current_medication', sa.String(length=255), nullable=True),
-    sa.Column('medication_start_date', sa.Date(), nullable=True),
-    sa.Column('has_diabetes', sa.Boolean(), nullable=False),
-    sa.Column('has_kidney_disease', sa.Boolean(), nullable=False),
-    sa.Column('has_heart_disease', sa.Boolean(), nullable=False),
-    sa.Column('last_checkup_date', sa.Date(), nullable=True),
-    sa.Column('next_checkup_date', sa.Date(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_hypertension_profiles_patient_id'), 'hypertension_profiles', ['patient_id'], unique=True)
     op.create_table('scheduled_checks',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('patient_id', sa.Uuid(), nullable=False),
@@ -426,33 +294,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_alerts_patient_id'), 'alerts', ['patient_id'], unique=False)
     op.create_index(op.f('ix_alerts_severity'), 'alerts', ['severity'], unique=False)
     op.create_index(op.f('ix_alerts_status'), 'alerts', ['status'], unique=False)
-    op.create_table('appointment_reminders',
-    sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('appointment_id', sa.Uuid(), nullable=False),
-    sa.Column('patient_id', sa.Uuid(), nullable=False),
-    sa.Column('organization_id', sa.Uuid(), nullable=False),
-    sa.Column('channels', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('scheduled_send_time', sa.DateTime(timezone=True), nullable=False),
-    sa.Column('status', sa.Enum('SCHEDULED', 'SENT', 'FAILED', 'CANCELLED', name='reminderstatus'), nullable=False),
-    sa.Column('attempts', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('idempotency_key', sa.String(length=128), nullable=False),
-    sa.Column('created_by_agent', sa.String(length=50), nullable=False),
-    sa.Column('reminder_type', sa.String(length=50), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['appointment_id'], ['appointments.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('idx_reminder_org_status', 'appointment_reminders', ['organization_id', 'status'], unique=False)
-    op.create_index('idx_reminder_scheduled_status', 'appointment_reminders', ['scheduled_send_time', 'status'], unique=False)
-    op.create_index(op.f('ix_appointment_reminders_appointment_id'), 'appointment_reminders', ['appointment_id'], unique=False)
-    op.create_index(op.f('ix_appointment_reminders_idempotency_key'), 'appointment_reminders', ['idempotency_key'], unique=True)
-    op.create_index(op.f('ix_appointment_reminders_organization_id'), 'appointment_reminders', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_appointment_reminders_patient_id'), 'appointment_reminders', ['patient_id'], unique=False)
-    op.create_index(op.f('ix_appointment_reminders_scheduled_send_time'), 'appointment_reminders', ['scheduled_send_time'], unique=False)
-    op.create_index(op.f('ix_appointment_reminders_status'), 'appointment_reminders', ['status'], unique=False)
     op.create_table('agent_actions',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('patient_id', sa.Uuid(), nullable=False),
@@ -470,7 +311,6 @@ def upgrade() -> None:
     sa.Column('retry_count', sa.Integer(), nullable=False),
     sa.Column('ai_reasoning', sa.Text(), nullable=True),
     sa.Column('confidence_score', sa.Float(), nullable=True),
-    sa.Column('decision_trace', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='CASCADE'),
@@ -494,15 +334,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_agent_actions_organization_id'), table_name='agent_actions')
     op.drop_index(op.f('ix_agent_actions_action_type'), table_name='agent_actions')
     op.drop_table('agent_actions')
-    op.drop_index(op.f('ix_appointment_reminders_status'), table_name='appointment_reminders')
-    op.drop_index(op.f('ix_appointment_reminders_scheduled_send_time'), table_name='appointment_reminders')
-    op.drop_index(op.f('ix_appointment_reminders_patient_id'), table_name='appointment_reminders')
-    op.drop_index(op.f('ix_appointment_reminders_organization_id'), table_name='appointment_reminders')
-    op.drop_index(op.f('ix_appointment_reminders_idempotency_key'), table_name='appointment_reminders')
-    op.drop_index(op.f('ix_appointment_reminders_appointment_id'), table_name='appointment_reminders')
-    op.drop_index('idx_reminder_scheduled_status', table_name='appointment_reminders')
-    op.drop_index('idx_reminder_org_status', table_name='appointment_reminders')
-    op.drop_table('appointment_reminders')
     op.drop_index(op.f('ix_alerts_status'), table_name='alerts')
     op.drop_index(op.f('ix_alerts_severity'), table_name='alerts')
     op.drop_index(op.f('ix_alerts_patient_id'), table_name='alerts')
@@ -512,35 +343,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_scheduled_checks_next_run_at'), table_name='scheduled_checks')
     op.drop_index(op.f('ix_scheduled_checks_is_active'), table_name='scheduled_checks')
     op.drop_table('scheduled_checks')
-    op.drop_index(op.f('ix_hypertension_profiles_patient_id'), table_name='hypertension_profiles')
-    op.drop_table('hypertension_profiles')
-    op.drop_index(op.f('ix_hiv_profiles_patient_id'), table_name='hiv_profiles')
-    op.drop_table('hiv_profiles')
     op.drop_index(op.f('ix_health_readings_reading_type'), table_name='health_readings')
     op.drop_index(op.f('ix_health_readings_reading_time'), table_name='health_readings')
     op.drop_index(op.f('ix_health_readings_patient_id'), table_name='health_readings')
     op.drop_index(op.f('ix_health_readings_organization_id'), table_name='health_readings')
     op.drop_index(op.f('ix_health_readings_is_anomaly'), table_name='health_readings')
     op.drop_table('health_readings')
-    op.drop_index(op.f('ix_diabetes_profiles_patient_id'), table_name='diabetes_profiles')
-    op.drop_table('diabetes_profiles')
-    op.drop_index(op.f('ix_call_sessions_room_name'), table_name='call_sessions')
-    op.drop_index(op.f('ix_call_sessions_patient_id'), table_name='call_sessions')
-    op.drop_index(op.f('ix_call_sessions_organization_id'), table_name='call_sessions')
-    op.drop_index('idx_call_sessions_status', table_name='call_sessions')
-    op.drop_index('idx_call_sessions_started_at', table_name='call_sessions')
-    op.drop_index('idx_call_sessions_call_type', table_name='call_sessions')
-    op.drop_table('call_sessions')
-    op.drop_index(op.f('ix_appointments_scheduled_time'), table_name='appointments')
-    op.drop_index(op.f('ix_appointments_priority_level'), table_name='appointments')
-    op.drop_index(op.f('ix_appointments_patient_id'), table_name='appointments')
-    op.drop_index(op.f('ix_appointments_organization_id'), table_name='appointments')
-    op.drop_table('appointments')
     op.drop_index(op.f('ix_refresh_tokens_user_id'), table_name='refresh_tokens')
     op.drop_index(op.f('ix_refresh_tokens_token'), table_name='refresh_tokens')
     op.drop_index('idx_refresh_tokens_expires', table_name='refresh_tokens')
     op.drop_table('refresh_tokens')
-    op.drop_index(op.f('ix_patients_team_id'), table_name='patients')
     op.drop_index(op.f('ix_patients_patient_uid'), table_name='patients')
     op.drop_index(op.f('ix_patients_organization_id'), table_name='patients')
     op.drop_index('idx_patients_status', table_name='patients')
@@ -551,7 +363,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_password_reset_tokens_token'), table_name='password_reset_tokens')
     op.drop_table('password_reset_tokens')
     op.drop_index(op.f('ix_invitations_token'), table_name='invitations')
-    op.drop_index(op.f('ix_invitations_team_id'), table_name='invitations')
     op.drop_index(op.f('ix_invitations_organization_id'), table_name='invitations')
     op.drop_index(op.f('ix_invitations_email'), table_name='invitations')
     op.drop_table('invitations')
@@ -562,15 +373,10 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_audit_logs_organization_id'), table_name='audit_logs')
     op.drop_index(op.f('ix_audit_logs_action'), table_name='audit_logs')
     op.drop_table('audit_logs')
-    op.drop_index(op.f('ix_users_team_id'), table_name='users')
     op.drop_index(op.f('ix_users_organization_id'), table_name='users')
     op.drop_index(op.f('ix_users_email'), table_name='users')
-    op.drop_index('idx_users_team', table_name='users')
     op.drop_index('idx_users_org_role', table_name='users')
     op.drop_table('users')
-    op.drop_index(op.f('ix_teams_organization_id'), table_name='teams')
-    op.drop_index('idx_teams_org_name', table_name='teams')
-    op.drop_table('teams')
     op.drop_table('organizations')
     op.drop_index(op.f('ix_email_templates_slug'), table_name='email_templates')
     op.drop_table('email_templates')
