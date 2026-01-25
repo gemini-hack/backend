@@ -492,15 +492,9 @@ class UserService(BaseService):
                 pass
                 
         if search:
+            # User requested to search only by email since it's indexed
             search_term = f"%{search}%"
-            conditions.append(
-                or_(
-                    User.first_name.ilike(search_term),
-                    User.last_name.ilike(search_term),
-                    User.email.ilike(search_term),
-                    func.concat(User.first_name, ' ', User.last_name).ilike(search_term),
-                )
-            )
+            conditions.append(User.email.ilike(search_term))
         
         # Use QueryBuilder
         base_query = User.query(self.db).filter(*conditions)

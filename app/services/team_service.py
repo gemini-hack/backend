@@ -366,7 +366,7 @@ class TeamService:
         self,
         user: User,
         team_id: UUID,
-        member_user_id: UUID,
+        email: str,
     ) -> User:
         """
         Add a user to a team.
@@ -376,7 +376,7 @@ class TeamService:
         Args:
             user: The authenticated user.
             team_id: The team ID.
-            member_user_id: The user ID to add.
+            email: The email of the user to add.
         
         Returns:
             The updated User object.
@@ -396,11 +396,11 @@ class TeamService:
         # Verify member exists in org
         member = await User.fetch_one(
             self.db,
-            id=member_user_id,
+            email=email,
             organization_id=user.organization_id
         )
         if not member:
-            raise MemberNotFoundError(f"User {member_user_id} not found in organization")
+            raise MemberNotFoundError(f"User with email '{email}' not found in organization")
         
         # Assign to team
         member.team_id = team_id
@@ -410,7 +410,8 @@ class TeamService:
             "Member added to team",
             extra={
                 "team_id": str(team_id),
-                "member_id": str(member_user_id),
+                "member_email": email,
+                "member_id": str(member.id),
                 "added_by": str(user.id),
             }
         )

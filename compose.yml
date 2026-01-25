@@ -6,9 +6,9 @@ services:
       context: .
       target: runtime
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - .:/app
-      - /app/.venv # Don't mount over virtual environment
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv # Don't mount over virtual environment
     ports:
       - "8000:8000"
     env_file:
@@ -34,9 +34,9 @@ services:
       context: .
       target: runtime
     command: celery -A app.celery_app worker --loglevel=info
-    volumes:
-      - .:/app
-      - /app/.venv
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
     env_file:
       - .env
     environment:
@@ -54,9 +54,9 @@ services:
       context: .
       target: runtime
     command: celery -A app.celery_app beat --loglevel=info
-    volumes:
-      - .:/app
-      - /app/.venv
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
     env_file:
       - .env
     environment:
@@ -74,9 +74,9 @@ services:
       context: .
       target: runtime
     command: python -m app.agents.livekit_gemini.main start
-    volumes:
-      - .:/app
-      - /app/.venv
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
     env_file:
       - .env
     environment:

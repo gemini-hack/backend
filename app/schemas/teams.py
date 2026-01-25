@@ -92,12 +92,12 @@ class TeamListResponse(BaseModel):
 
 class AddMemberRequest(BaseModel):
     """Schema for adding a member to a team."""
-    user_id: UUID
+    email: str = Field(..., max_length=255, pattern=r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
     
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "user_id": "987e6543-e21c-45d6-b789-123456789abc"
+                "email": "worker@organization.com"
             }
         }
     )
