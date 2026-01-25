@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # Frontend
 
-    FRONTEND_URL: str = "https://miraproject.online"
+    FRONTEND_URL: str = "https://app.miraproject.online"
     
     # Gemini AI
     GEMINI_API_KEY: str = ""

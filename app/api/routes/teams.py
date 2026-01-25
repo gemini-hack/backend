@@ -5,10 +5,10 @@ Teams Router - API endpoints for team/department management.
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
-from app.api.dependencies import CurrentUser, DbSession, require_permission
+from app.api.dependencies import CurrentUser, DbSession, require_permission, get_client_ip
 from app.services.team_service import (
     TeamService,
     TeamNotFoundError,
@@ -27,6 +27,8 @@ from app.schemas.teams import (
     AssignPatientRequest,
     BulkAssignPatientsRequest,
 )
+from app.schemas.auth import InviteWorkerRequest
+from app.services.user_service import UserService
 from app.utils.responses import success_response, fail_response
 
 router = APIRouter(prefix="/teams", tags=["Teams"])
@@ -276,7 +278,7 @@ async def add_member(
         member = await service.add_member(
             user=user,
             team_id=team_id,
-            member_user_id=data.user_id,
+            email=data.email,
         )
     except InsufficientPermissionsError as e:
         return fail_response(
@@ -346,6 +348,48 @@ async def remove_member(
             "email": member.email,
         },
     )
+
+
+@router.post(
+    "/{team_id}/invitations",
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite new worker to team",
+    description="Invite a NEW worker via email and assign them to this team automatically upon acceptance. Organization owners and admins only.",
+)
+async def invite_worker_to_team(
+    request: Request,
+    team_id: UUID,
+    data: InviteWorkerRequest,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Invite a new worker directly to this team."""
+    # Ensure team_id in URL matches body
+    data.team_id = team_id
+    
+    # Verify team exists
+    team_service = TeamService(db)
+    await team_service.get_team(team_id, user.organization_id)
+
+    # Use UserService to send invite
+    user_service = UserService(db)
+    
+    # Check permissions (only admins/owners)
+    if user.role not in ["org_owner", "org_admin"]:
+         raise HTTPException(status_code=403, detail="Only admins can invite members")
+    
+    result = await user_service.invite_worker(
+        inviter=user,
+        data=data,
+        ip_address=get_client_ip(request),
+    )
+    
+    return success_response(
+        status_code=status.HTTP_201_CREATED,
+        message="Invitation sent successfully",
+        data=jsonable_encoder(result),
+    )
+
 
 
 # ============== Patient Assignment ==============
