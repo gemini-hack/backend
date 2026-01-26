@@ -1,6 +1,7 @@
 import uuid
 import enum
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Enum, Index
 from sqlalchemy.dialects.postgresql import JSONB
@@ -8,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base_model import BaseModel
+
+if TYPE_CHECKING:
+    from app.models.calendar import CalendarIntegration
 
 
 class UserRole(str, enum.Enum):
@@ -110,6 +114,9 @@ class User(BaseModel):
     team = relationship("Team", back_populates="members", foreign_keys=[team_id])
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     sent_invitations = relationship("Invitation", back_populates="invited_by_user", foreign_keys="Invitation.invited_by")
+    calendar_integrations: Mapped[list["CalendarIntegration"]] = relationship(
+        "CalendarIntegration", back_populates="user", cascade="all, delete-orphan"
+    )
     
     __table_args__ = (
         Index("idx_users_org_role", "organization_id", "role"),

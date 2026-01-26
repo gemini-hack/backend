@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import TypeVar, Type, Sequence, Any, Optional
 
-from sqlalchemy import DateTime, select, Select, func as sa_func, desc as sa_desc, asc as sa_asc
+from sqlalchemy import DateTime, select, Select, func as sa_func, desc as sa_desc, asc as sa_asc, TypeDecorator, Text
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, InstrumentedAttribute
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
+from app.utils.security import encrypt_token, decrypt_token, is_token_encrypted
 
 
 class Base(DeclarativeBase):

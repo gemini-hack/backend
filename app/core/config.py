@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     MAX_VOICE_CALLS_PER_DAY_PER_ORG: int = 50
     REMINDER_RATE_LIMIT_KEY_PREFIX: str = "reminder_limit"
 
+    # Google Calendar OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/integrations/google/callback"
+    CALENDAR_ENCRYPTION_KEY: str = ""
+
 
     @property
     def cors_origins_list(self) -> list[str]:

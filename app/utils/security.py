@@ -1,14 +1,18 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
-from jose import jwt, JWTError
-from fastapi import HTTPException
-import secrets
-import bcrypt
+import base64
 import hashlib
 import hmac
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
+import bcrypt
+from cryptography.fernet import Fernet, InvalidToken
+from fastapi import HTTPException
+from jose import jwt, JWTError
 from user_agents import parse
 
 from app.core.config import settings
+from app.utils.logger import logger
 
 
 def hash_password(password: str) -> str:
@@ -176,3 +180,91 @@ def get_device_info(user_agent_str: str) -> dict[str, Any]:
 def generate_token(length: int = 32) -> str:
     """Generate a secure random token."""
     return secrets.token_urlsafe(length)
+
+
+# ============== Token Encryption ==============
+
+class TokenEncryption:
+    """Encrypts and decrypts OAuth tokens using Fernet symmetric encryption."""
+    
+    _instance: Optional["TokenEncryption"] = None
+    _fernet: Optional[Fernet] = None
+    _fallback_fernet: Optional[Fernet] = None
+    
+    def __new__(cls) -> "TokenEncryption":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+    
+    def _initialize(self) -> None:
+        """Initialize the Fernet cipher with a dedicated key."""
+        # Primary key from dedicated setting
+        key_bytes = hashlib.sha256(settings.CALENDAR_ENCRYPTION_KEY.encode()).digest()
+        fernet_key = base64.urlsafe_b64encode(key_bytes)
+        self._fernet = Fernet(fernet_key)
+
+        # Fallback key from JWT secret (for backward compatibility)
+        fallback_bytes = hashlib.sha256(settings.JWT_SECRET_KEY.encode()).digest()
+        fallback_key = base64.urlsafe_b64encode(fallback_bytes)
+        self._fallback_fernet = Fernet(fallback_key)
+    
+    def encrypt(self, plaintext: str) -> str:
+        """Encrypt a token string for secure storage."""
+        if not plaintext:
+            return plaintext
+        
+        try:
+            encrypted = self._fernet.encrypt(plaintext.encode())
+            return encrypted.decode()
+        except Exception as e:
+            logger.error(f"Token encryption failed: {e}")
+            raise ValueError("Failed to encrypt token") from e
+    
+    def decrypt(self, ciphertext: str) -> str:
+        """Decrypt an encrypted token string with fallback support."""
+        if not ciphertext:
+            return ciphertext
+        
+        # Try primary key
+        try:
+            decrypted = self._fernet.decrypt(ciphertext.encode())
+            return decrypted.decode()
+        except InvalidToken:
+            # Try fallback key
+            try:
+                decrypted = self._fallback_fernet.decrypt(ciphertext.encode())
+                logger.info("Token decrypted using fallback JWT-derived key")
+                return decrypted.decode()
+            except InvalidToken:
+                logger.error("Token decryption failed: Invalid token for all keys")
+                raise ValueError("Failed to decrypt token: invalid or corrupted data")
+        except Exception as e:
+            logger.error(f"Token decryption failed: {e}")
+            raise ValueError("Failed to decrypt token") from e
+    
+    def is_encrypted(self, value: str) -> bool:
+        """Check if a value appears to be Fernet-encrypted."""
+        if not value:
+            return False
+        # Fernet tokens start with 'gAAAAA'
+        return isinstance(value, str) and value.startswith("gAAAAA")
+
+
+# Convenience functions for direct use
+_encryption = TokenEncryption()
+
+
+def encrypt_token(token: str) -> str:
+    """Encrypt a token for storage."""
+    return _encryption.encrypt(token)
+
+
+def decrypt_token(encrypted_token: str) -> str:
+    """Decrypt a stored token."""
+    return _encryption.decrypt(encrypted_token)
+
+
+def is_token_encrypted(value: str) -> bool:
+    """Check if a token value is encrypted."""
+    return _encryption.is_encrypted(value)

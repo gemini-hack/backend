@@ -168,7 +168,52 @@ class BadRequestException(BaseAPIException):
 
 class EmailDeliveryError(Exception):
     """Raised when email delivery fails."""
+    
     def __init__(self, message: str, to_email: str = None, original_error: Exception = None):
         self.to_email = to_email
         self.original_error = original_error
         super().__init__(message)
+
+
+# ============== Calendar Integration Exceptions ==============
+
+class CalendarServiceError(Exception):
+    """Base exception for calendar service errors."""
+    
+    def __init__(self, message: str = "Calendar service error", details: dict | None = None):
+        self.message = message
+        self.details = details or {}
+        self.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        super().__init__(self.message)
+
+
+class CalendarAuthError(CalendarServiceError):
+    """Authentication/authorization errors (invalid credentials, revoked access)."""
+    
+    def __init__(self, message: str = "Calendar authentication failed", details: dict | None = None):
+        super().__init__(message, details)
+        self.status_code = status.HTTP_401_UNAUTHORIZED
+
+
+class CalendarTokenExpiredError(CalendarAuthError):
+    """Token has expired and cannot be refreshed."""
+    
+    def __init__(self, message: str = "Calendar token expired", details: dict | None = None):
+        super().__init__(message, details)
+        self.status_code = status.HTTP_401_UNAUTHORIZED
+
+
+class CalendarAPIError(CalendarServiceError):
+    """External API errors from the calendar provider."""
+    
+    def __init__(self, message: str = "Calendar API error", status_code: int | None = None, details: dict | None = None):
+        super().__init__(message, details)
+        self.status_code = status_code or status.HTTP_502_BAD_GATEWAY
+
+
+class CalendarRateLimitError(CalendarAPIError):
+    """Rate limit exceeded on calendar API."""
+    
+    def __init__(self, message: str = "Rate limit exceeded", retry_after: int | None = None):
+        super().__init__(message, status_code=status.HTTP_429_TOO_MANY_REQUESTS)
+        self.retry_after = retry_after
