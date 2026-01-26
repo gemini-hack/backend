@@ -17,6 +17,9 @@ from app.models.conditions import *
 from app.models.agent import *
 from app.models.template import *
 from app.models.call_session import *
+from app.models.appointment import *
+from app.models.reminder import *
+from app.models.calendar import *
 
 config = context.config
 
