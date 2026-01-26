@@ -10,6 +10,9 @@ from app.utils.logger import logger
 
 from .security import validate_input, sanitize_query_input, audit_log
 from .session_cache import get_session_cache
+from app.services.availability_service import AvailabilityService
+from app.services.appointment_service import AppointmentService
+from app.models.appointment import AppointmentStatus
 
 
 @function_tool
@@ -357,6 +360,145 @@ async def get_my_caseload_summary() -> str:
 - Pending Actions: {pending_actions}"""
 
 
+
+@function_tool
+async def check_availability_for_rescheduling(patient_id: str) -> str:
+    """
+    Check if a patient has a missed appointment and find available slots for rescheduling.
+    
+    Args:
+        patient_id: The patient's UID (e.g., 'PT-001')
+        
+    Returns:
+        String description of missed appointment and list of available slots.
+    """
+    valid, error = validate_input(patient_id, max_length=50, field_name="patient ID")
+    if not valid:
+        return error or "Invalid input."
+
+    patient_id = sanitize_query_input(patient_id)
+    
+    async with async_session_factory() as db:
+        # 1. Find patient
+        patient = await (
+            Patient.query(db)
+            .filter(Patient.patient_uid == patient_id)
+            .first()
+        )
+        if not patient:
+            return f"Patient not found: {patient_id}"
+            
+        # 2. Find most recent NO_SHOW or CANCELLED appointment
+        # We need to sort by scheduled_time DESC
+        last_appointment = await (
+            Appointment.query(db)
+            .filter(
+                Appointment.patient_id == patient.id,
+                or_(
+                    Appointment.status == AppointmentStatus.NO_SHOW,
+                    Appointment.status == AppointmentStatus.CANCELLED
+                )
+            )
+            .order_by(Appointment.scheduled_time, desc=True)
+            .first()
+        )
+        
+        if not last_appointment:
+            return "No recently missed or cancelled appointments found eligible for rescheduling."
+            
+        # 3. Get availability
+        # Use provider from the missed appointment if possible, or fallback
+        # Range: Next 7 days
+        start_date = datetime.now() + timedelta(minutes=30) # buffer
+        end_date = start_date + timedelta(days=7)
+        
+        slots = await AvailabilityService.get_available_slots(
+            org_id=patient.organization_id,
+            start_date=start_date,
+            end_date=end_date,
+            provider_id=last_appointment.provider_id
+        )
+        
+        if not slots:
+            return "No available slots found for the next 7 days. Please contact the clinic."
+            
+        # Format slots (take top 5)
+        slot_strings = [s.strftime("%A, %b %d at %I:%M %p") for s in slots[:5]]
+        slots_text = "\n".join([f"- {s}" for s in slot_strings])
+        
+        missed_time = last_appointment.scheduled_time.strftime("%b %d")
+        
+        return f"""Found missed appointment from {missed_time}.
+Here are some available times to reschedule:
+{slots_text}
+
+To reschedule, please reply with the preferred time.
+(System: Call confirm_reschedule with the exact ISO timestamp of the chosen slot)
+"""
+
+
+@function_tool
+async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
+    """
+    Confirm and execute the rescheduling of an appointment.
+    
+    Args:
+        patient_id: The patient's UID
+        chosen_slot_iso: The ISO formatted string of the chosen time slot
+        
+    Returns:
+        Confirmation message
+    """
+    valid, error = validate_input(patient_id, max_length=50, field_name="patient ID")
+    if not valid:
+        return error or "Invalid input."
+        
+    try:
+        new_time = datetime.fromisoformat(chosen_slot_iso.replace("Z", "+00:00"))
+    except ValueError:
+        return "Invalid date format. Please provide ISO 8601 format."
+        
+    async with async_session_factory() as db:
+        # 1. Find patient and their missed appointment again (for safety)
+        patient = await (
+            Patient.query(db)
+            .filter(Patient.patient_uid == patient_id)
+            .first()
+        )
+        if not patient:
+            return "Patient not found."
+            
+        last_appointment = await (
+            Appointment.query(db)
+            .filter(
+                Appointment.patient_id == patient.id,
+                or_(
+                    Appointment.status == AppointmentStatus.NO_SHOW,
+                    Appointment.status == AppointmentStatus.CANCELLED
+                )
+            )
+            .order_by(Appointment.scheduled_time, desc=True)
+            .first()
+        )
+        
+        if not last_appointment:
+            return "Could not find the appointment to reschedule."
+            
+        try:
+            # We call the service logic here. 
+            updated_appt = await AppointmentService.reschedule_appointment(
+                appointment_id=last_appointment.id,
+                new_start_time=new_time,
+                organization_id=patient.organization_id
+            )
+            
+            return f"Successfully rescheduled appointment to {new_time.strftime('%A, %b %d at %I:%M %p')}."
+            
+        except Exception as e:
+            logger.error(f"Reschedule failed: {e}")
+            return f"Failed to reschedule: {str(e)}"
+
+
 MIRA_TOOLS = [
     get_patient_info,
     get_patient_by_id,
@@ -365,4 +507,6 @@ MIRA_TOOLS = [
     get_patient_appointments,
     get_active_alerts,
     get_my_caseload_summary,
+    check_availability_for_rescheduling,
+    confirm_reschedule,
 ]
