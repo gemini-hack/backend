@@ -198,3 +198,58 @@ async def update_worker_status(
         message=f"Worker {worker.email} status updated",
         data={"worker_id": str(worker.id), "is_active": worker.is_active},
     )
+
+
+@router.get(
+    "/activity",
+    status_code=status.HTTP_200_OK,
+    summary="List all workers real-time activity",
+    dependencies=[Depends(require_permission("users:read"))],
+)
+async def list_workers_activity(
+    user: CurrentUser,
+    db: DbSession,
+):
+    """
+    Get real-time activity, specialization, and caseload for all workers in the organization.
+    Admin/Coordinator only.
+    """
+    user_service = UserService(db)
+    activity_list = await user_service.list_workers_activity(user.organization_id)
+    
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Staff activity list retrieved successfully",
+        data=jsonable_encoder(activity_list),
+    )
+
+
+@router.get(
+    "/{worker_id}/activity",
+    status_code=status.HTTP_200_OK,
+    summary="Get worker real-time activity",
+    dependencies=[Depends(require_permission("users:read"))],
+)
+async def get_worker_activity(
+    worker_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """
+    Get specific worker real-time activity status, specialization, and caseload.
+    Admin only.
+    """
+    user_service = UserService(db)
+    
+    # Ensure worker belongs to same organization
+    worker = await user_service.get_user_by_id(worker_id)
+    if not worker or worker.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Worker not found")
+        
+    activity = await user_service.get_worker_activity(worker_id)
+    
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Worker activity retrieved successfully",
+        data=jsonable_encoder(activity),
+    )

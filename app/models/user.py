@@ -95,6 +95,10 @@ class User(BaseModel):
     # Role
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.COORDINATOR)
     
+    # Specialization & Skills
+    specialization: Mapped[str | None] = mapped_column(String(255))
+    skills: Mapped[list] = mapped_column(JSONB, default=list)
+    
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
