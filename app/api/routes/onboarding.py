@@ -1,44 +1,51 @@
-from typing import Annotated
+from typing import Annotated, Optional
+from fastapi import APIRouter, status, Depends
+from fastapi.encoders import jsonable_encoder
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.dependencies import require_permission
+from app.api.dependencies import CurrentUser, DbSession, require_permission
 from app.core.permissions import PERM_ONBOARDING_COMPLETE, PERM_SETTINGS_READ
-from app.db.database import get_db
-from app.models.user import User
 from app.schemas.onboarding import (
     OnboardingStatusResponse,
     OnboardingCompleteRequest,
     OnboardingCompleteResponse,
 )
 from app.services.onboarding_service import OnboardingService
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
-DbSession = Annotated[AsyncSession, Depends(get_db)]
 
-
-@router.get("/status", response_model=OnboardingStatusResponse)
+@router.get(
+    "/status",
+    status_code=status.HTTP_200_OK,
+    response_model=OnboardingStatusResponse,
+    summary="Get onboarding status",
+)
 async def get_onboarding_status(
-    user: Annotated[User, Depends(require_permission(PERM_SETTINGS_READ))],
+    user: Annotated[CurrentUser, Depends(require_permission(PERM_SETTINGS_READ))],
     db: DbSession,
 ):
     """Check if onboarding is complete."""
     service = OnboardingService(db)
+    result = await service.get_status(user.organization_id)
     
-    try:
-        result = await service.get_status(user.organization_id)
-        return OnboardingStatusResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Onboarding status retrieved",
+        data=jsonable_encoder(OnboardingStatusResponse(**result)),
+    )
 
 
-@router.post("/complete", response_model=OnboardingCompleteResponse)
+@router.post(
+    "/complete",
+    status_code=status.HTTP_200_OK,
+    response_model=OnboardingCompleteResponse,
+    summary="Complete onboarding",
+)
 async def complete_onboarding(
-    user: Annotated[User, Depends(require_permission(PERM_ONBOARDING_COMPLETE))],
+    user: Annotated[CurrentUser, Depends(require_permission(PERM_ONBOARDING_COMPLETE))],
     db: DbSession,
-    request: OnboardingCompleteRequest = None,
+    request: Optional[OnboardingCompleteRequest] = None,
 ):
     """Complete onboarding in a single call"""
     # Default empty request
@@ -46,12 +53,13 @@ async def complete_onboarding(
         request = OnboardingCompleteRequest()
     
     service = OnboardingService(db)
+    result = await service.complete(
+        org_id=user.organization_id,
+        request=request,
+    )
     
-    try:
-        result = await service.complete(
-            org_id=user.organization_id,
-            request=request,
-        )
-        return OnboardingCompleteResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message=result["message"],
+        data=jsonable_encoder(OnboardingCompleteResponse(**result)),
+    )
