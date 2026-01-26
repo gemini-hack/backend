@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.user import Organization
 from app.services.twilio_provisioning import TwilioProvisioningService
+from app.core.config import settings
 from app.utils.logger import logger
 
 
@@ -99,10 +100,16 @@ class PhoneSettingsService:
                 settings["twilio_auth_token"] = subaccount["auth_token"]
                 created_subaccount = True
             
-            # Provision phone number
+            # Provision phone number with webhooks
+            base_url = settings.API_BASE_URL.rstrip('/')
+            voice_url = f"{base_url}/api/v1/webhooks/twilio/voice"
+            status_callback = f"{base_url}/api/v1/webhooks/twilio/status"
+            
             result = await self.twilio.provision_number(
                 subaccount_sid=settings["twilio_subaccount_sid"],
                 phone_number=phone_number,
+                voice_url=voice_url,
+                status_callback=status_callback,
             )
             phone_sid = result["phone_sid"]
             created_phone = True

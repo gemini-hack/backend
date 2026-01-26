@@ -36,6 +36,9 @@ class Organization(BaseModel):
     # Specializations (e.g., ["hiv", "hypertension"])
     disease_specializations: Mapped[list] = mapped_column(JSONB, default=list)
     
+    phone_settings: Mapped[dict | None] = mapped_column(JSONB)
+    agent_settings: Mapped[dict | None] = mapped_column(JSONB)
+    
     # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
     teams = relationship("Team", back_populates="organization", cascade="all, delete-orphan")

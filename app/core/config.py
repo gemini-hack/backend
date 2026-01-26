@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "Mira AI"
     APP_VERSION: str = "0.1.0"
+    API_BASE_URL: str = "https://miraproject.online"
     DEBUG: bool = False
     
     # Logging
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # Security
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "https://miraproject.online"
     MAX_LOGIN_ATTEMPTS: int = 5
     LOCKOUT_DURATION_MINUTES: int = 15
     REQUIRE_EMAIL_VERIFICATION: bool = True
