@@ -203,15 +203,15 @@ async def get_today_appointments() -> str:
         today = datetime.now().date()
         tomorrow = today + timedelta(days=1)
         
-        appointments = await (
-            Appointment.query(db)
-            .filter(
+        result = await db.execute(
+            select(Appointment)
+            .where(
                 Appointment.scheduled_time >= today,
                 Appointment.scheduled_time < tomorrow,
             )
-            .with_relations("patient")
-            .all()
+            .options(select.selectinload(Appointment.patient)) # Eager load patient
         )
+        appointments = result.scalars().all()
         
         if not appointments:
             return "No appointments scheduled for today."
@@ -220,7 +220,7 @@ async def get_today_appointments() -> str:
         for apt in appointments:
             time_str = apt.scheduled_time.strftime("%I:%M %p")
             patient = apt.patient
-            lines.append(f"- {time_str}: {patient.first_name} {patient.last_name} ({apt.type})")
+            lines.append(f"- {time_str}: {patient.first_name} {patient.last_name} ({apt.appointment_type})")
         
         return "\n".join(lines)
 
@@ -238,41 +238,39 @@ async def get_patient_appointments(patient_name: str) -> str:
     """
     valid, error = validate_input(patient_name, max_length=100, field_name="patient name")
     if not valid:
-        audit_log("get_patient_appointments", {"patient_name": patient_name}, error or "Validation failed", success=False)
-        return error or "Invalid input."
+        return error
     
     patient_name = sanitize_query_input(patient_name)
     
     async with async_session_factory() as db:
         # First find the patient
         search_term = f"%{patient_name}%"
-        patient = await (
-            Patient.query(db)
-            .filter(
+        result = await db.execute(
+            select(Patient).filter(
                 or_(
                     Patient.first_name.ilike(search_term),
                     Patient.last_name.ilike(search_term),
                     func.concat(Patient.first_name, ' ', Patient.last_name).ilike(search_term),
                 )
             )
-            .first()
         )
+        patient = result.scalars().first()
         
         if not patient:
             return f"No patient found with name '{patient_name}'"
         
         # Get their upcoming appointments
         now = datetime.now()
-        appointments = await (
-            Appointment.query(db)
+        result = await db.execute(
+            select(Appointment)
             .filter(
                 Appointment.patient_id == patient.id,
                 Appointment.scheduled_time >= now,
             )
             .order_by(Appointment.scheduled_time)
             .limit(10)
-            .all()
         )
+        appointments = result.scalars().all()
         
         if not appointments:
             return f"No upcoming appointments for {patient.first_name} {patient.last_name}"
@@ -280,7 +278,7 @@ async def get_patient_appointments(patient_name: str) -> str:
         lines = [f"Upcoming Appointments for {patient.first_name} {patient.last_name}:"]
         for apt in appointments:
             date_str = apt.scheduled_time.strftime("%b %d at %I:%M %p")
-            lines.append(f"- {date_str}: {apt.type}")
+            lines.append(f"- {date_str}: {apt.appointment_type}")
         
         return "\n".join(lines)
 

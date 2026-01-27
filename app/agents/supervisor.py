@@ -115,12 +115,7 @@ class SupervisorAgent(BaseSupervisor):
                             action.content["execution_error"] = "No contact info (Phone/Email) found"
 
                     elif action.type == "schedule_appointment_reminder":
-                        # Fetch or create the relevant reminder/appointment context
-                        # For now, we assume the action details contain enough info to trigger a general reminder
-                        # OR we trigger a specific logic if we had the appointment ID.
-                        
-                        # However, NotificationManager requires an Appointment object.
-                        # If the action is just "remind this patient", we might need to find their next appointment.
+
                         from app.models.appointment import Appointment, AppointmentStatus
                         from app.models.reminder import AppointmentReminder, ReminderChannel
                         
@@ -159,7 +154,10 @@ class SupervisorAgent(BaseSupervisor):
                                 action.content["execution_status"] = "FAILED_AT_NOTIFICATION_MANAGER"
                                 # We don't mark as completed, so a human sees it pending
                         else:
-                             action.content["execution_error"] = "No upcoming appointment found."
+                            logger.warning(f"Cannot remind {patient.first_name}: No upcoming appointment.")
+                            action.status = "escalated" # Mark as escalated, not failed
+                            action.content["execution_error"] = "No upcoming appointment found."
+                            action.content["suggested_next_step"] = "schedule_checkin"
 
                 except Exception as e:
                     logger.error(f"Failed to auto-execute {action.type}: {e}")
@@ -226,19 +224,12 @@ class SupervisorAgent(BaseSupervisor):
             
             clean_actions = []
             for action_data in actions_data:
-                # --- FIX: Map 'action_type' (DB/LLM) to 'type' (Pydantic) ---
                 if "action_type" in action_data and "type" not in action_data:
                     action_data["type"] = action_data.pop("action_type")
                 
-                # --- FIX: Ensure content is present ---
                 if "content" not in action_data or action_data["content"] is None:
-                    # If 'details' exists (old format), rename it to 'content'
-                    if "details" in action_data:
-                         action_data["content"] = action_data.pop("details")
-                    else:
-                         action_data["content"] = {}
+                    action_data["content"] = action_data.get("details", {})
 
-                # Create the object
                 clean_actions.append(AgentAction(**action_data))
             
             context.final_actions = clean_actions
@@ -246,16 +237,17 @@ class SupervisorAgent(BaseSupervisor):
             
         except Exception as e:
             logger.error(f"Gemini synthesis failed: {str(e)}. Falling back to rule-based synthesis.")
-            # Fallback to the previous rule-based logic if LLM fails
+
             self._rule_based_synthesis(context)
 
     def _rule_based_synthesis(self, context: AgentContext):
         """Fallback rule-based synthesis."""
-        all_proposals: List[AgentAction] = []
+        all_proposals = []
         for worker_result in context.worker_results.values():
             all_proposals.extend(worker_result.proposed_actions)
+        context.final_actions = all_proposals
             
-        final_actions_map: Dict[str, AgentAction] = {}
+        final_actions_map = {}
         priority_map = {
             "emergency_escalation": 100, "iit_recovery_plan": 95,
             "unsuppressed_vl_intervention": 90, "urgent_followup": 80,
