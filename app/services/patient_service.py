@@ -173,7 +173,10 @@ class PatientService(BaseService):
             preferred_contact_method=data.preferred_contact_method,
             preferred_language=data.preferred_language,
             status=PatientStatus.ACTIVE,
+            team_id=data.team_id,
+            provider_id=data.provider_id,
         )
+
         
         # Handle HIV Profile if provided
         if data.primary_condition == Condition.HIV and data.hiv_profile:

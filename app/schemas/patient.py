@@ -50,6 +50,9 @@ class PatientCreate(PatientBase):
     hypertension_profile: Optional[HypertensionProfileCreate] = None
     diabetes_profile: Optional[DiabetesProfileCreate] = None
 
+    team_id: Optional[UUID] = None
+    provider_id: Optional[UUID] = None
+
 class PatientResponse(PatientBase):
     """Schema for patient response."""
     id: UUID
@@ -109,3 +112,6 @@ class PatientUpdate(BaseModel):
     allergies: Optional[List[str]] = None
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
+
+    team_id: Optional[UUID] = None
+    provider_id: Optional[UUID] = None

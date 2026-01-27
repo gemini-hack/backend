@@ -1,6 +1,6 @@
 import json
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession  # <--- Added missing import
+from sqlalchemy.ext.asyncio import AsyncSession
 import google.genai.types as types
 from app.services.ai_service import GeminiService
 from app.schemas.patient import PatientCreate

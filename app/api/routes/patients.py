@@ -21,6 +21,8 @@ from app.models.conditions import Condition
 from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientUpdate
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
+from app.agents.context import AgentAction 
+from app.schemas.agent import AgentActionResponse
 from app.services.ingestion_service import IngestionService
 from app.tasks.importer import process_patient_batch_import
 from app.utils.responses import success_response
@@ -137,6 +139,44 @@ async def list_patients(
         message="Patients retrieved successfully",
         data=jsonable_encoder(result),
     )
+
+@router.get(
+    "/{patient_id}/agent-actions",
+    status_code=status.HTTP_200_OK,
+    response_model=list[AgentActionResponse], # Use the list of your new Schema
+    summary="Get agent actions for a patient",
+    dependencies=[Depends(require_permission("patients:read"))],
+)
+async def get_patient_agent_actions(
+    patient_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    """
+    Retrieve a log of actions taken by the Agent for this patient.
+    """
+    patient = await Patient.fetch_unique(
+        db, 
+        id=patient_id, 
+        organization_id=user.organization_id
+    )
+    if not patient:
+        raise NotFoundException("Patient not found")
+
+    stmt = (
+        select(AgentAction)
+        .where(AgentAction.patient_id == patient_id)
+        .order_by(AgentAction.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(stmt)
+    actions = result.scalars().all()
+
+    return actions
 
 
 @router.post(

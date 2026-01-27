@@ -115,6 +115,7 @@ class Patient(BaseModel):
     primary_physician = relationship("User", foreign_keys=[primary_physician_id])
     assigned_nurse = relationship("User", foreign_keys=[assigned_nurse_id])
     care_coordinator = relationship("User", foreign_keys=[care_coordinator_id])
+    appointments = relationship("Appointment", back_populates="patient", cascade="all, delete-orphan")
     
     # Modular Relationships
     hiv_profile: Mapped[Optional["HIVProfile"]] = relationship("HIVProfile", back_populates="patient", uselist=False, cascade="all, delete-orphan")
