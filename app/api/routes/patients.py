@@ -6,6 +6,7 @@ from uuid import UUID
 from app.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 
