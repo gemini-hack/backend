@@ -30,6 +30,7 @@ PERM_ORG_UPDATE = "org:update"
 PERM_CASELOAD_ASSIGN = "caseload:assign"
 PERM_CASELOAD_VIEW = "caseload:view" 
 PERM_WORKER_STATUS_UPDATE = "workers:status" 
+PERM_REPORTS_READ = "reports:read"
 
 PERM_SETTINGS_READ = "settings:read"
 PERM_SETTINGS_UPDATE = "settings:update"
@@ -44,6 +45,9 @@ ROLE_PERMISSIONS = {
         PERM_INVITATIONS_CREATE,
         PERM_INVITATIONS_READ,
         PERM_INVITATIONS_REVOKE,
+        
+        # Reports
+        PERM_REPORTS_READ,
         
         # Users
         PERM_USERS_READ,
@@ -77,6 +81,9 @@ ROLE_PERMISSIONS = {
     UserRole.DOCTOR: [
         # Users
         PERM_USERS_READ,
+        
+        # Reports
+        PERM_REPORTS_READ,
         
         # Patients
         PERM_PATIENTS_CREATE,

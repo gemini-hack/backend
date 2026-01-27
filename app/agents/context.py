@@ -7,9 +7,10 @@ class AgentAction(BaseModel):
     """A proposed action from an agent."""
     type: str
     target_id: str
-    details: Dict[str, Any] = Field(default_factory=dict)
+    content: Dict[str, Any] = Field(default_factory=dict)
     reasoning: str
     confidence: float = 1.0
+    status: str = "pending"
 
 class WorkerResult(BaseModel):
     """Result of a worker agent's analysis."""

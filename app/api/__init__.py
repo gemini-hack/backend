@@ -15,6 +15,7 @@ from app.api.routes import (
     onboarding_router,
     settings_router,
     teams_router,
+    analytics_router,
 )
 
 # Main API router
@@ -43,4 +44,7 @@ api_router.include_router(settings_router)
 # --- Webhooks ---
 api_router.include_router(livekit_webhooks_router)
 api_router.include_router(twilio_webhooks_router)
+
+# --- Analytics ---
+api_router.include_router(analytics_router)
 

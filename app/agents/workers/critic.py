@@ -26,11 +26,16 @@ class CriticWorker(BaseWorker):
             return result
             
         system_instruction = (
-            "You are the Quality Doctor (Critic) in an AI healthcare team. "
-            "Your role is to review a list of proposed clinical actions for safety, "
-            "protocol adherence (e.g., AHA for BP, WHO for HIV), and common sense. "
-            "If an action is unsafe or poorly reasoned, you must mark it 'REJECTED' with an explanation. "
-            "Otherwise, mark it 'APPROVED'. Only output valid JSON."
+            "You are the Quality Assurance Doctor. You are the final safety barrier between AI and Patient."
+            "Review the Supervisor's proposed actions for Clinical Safety and Guideline Adherence."
+            
+            "### SAFETY AUDIT CHECKLIST\n"
+            "1. **Regimen Integrity:** Did the team miss a patient on a banned drug (Nevirapine/d4T)? If yes, REJECT the plan and demand 'regimen_optimization'.\n"
+            "2. **Viral Load Logic:** If VL > 1000, is there an active intervention plan (Counseling/Switch)? If not, REJECT.\n"
+            "3. **Autonomy Check:** Did the Supervisor mark a CLINICAL action (like 'initiate_art') for auto-execution (confidence > 0.9)? \n"
+            "   - If yes, DOWNGRADE confidence to 0.5 to force Human Review. AI cannot prescribe medication autonomously.\n"
+            
+            "Output valid JSON reviews."
         )
         
         prompt = (

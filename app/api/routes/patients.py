@@ -3,6 +3,8 @@ import os
 import uuid
 from typing import Optional
 from uuid import UUID
+from app.db.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
@@ -19,6 +21,7 @@ from app.models.conditions import Condition
 from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientUpdate
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
+from app.services.ingestion_service import IngestionService
 from app.tasks.importer import process_patient_batch_import
 from app.utils.responses import success_response
 
@@ -39,7 +42,8 @@ async def create_patient(
 ):
     """Create a new patient record."""
     service = PatientService(db)
-    result = await service.create_patient(
+    # Service now returns ORM object
+    patient_orm = await service.create_patient(
         creator=user,
         data=data,
         ip_address=get_client_ip(request),
@@ -47,8 +51,60 @@ async def create_patient(
     return success_response(
         status_code=status.HTTP_201_CREATED,
         message="Patient created successfully",
-        data=jsonable_encoder(result),
+        data=jsonable_encoder(PatientResponse.model_validate(patient_orm)),
     )
+
+@router.post("/ingest/document")
+async def ingest_medical_document(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = None
+):
+    """
+    Upload a photo/PDF of a patient chart. 
+    Gemini extracts the data and creates the patient.
+    """
+    if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
+        raise HTTPException(400, "Invalid file type. Use JPG, PNG, or PDF.")
+
+    # 1. Read Bytes
+    content = await file.read()
+    
+    # 2. AI Processing
+    ingestor = IngestionService(db)
+    patient_data = await ingestor.parse_document_to_patient(content, file.content_type)
+    
+    if not patient_data:
+        raise HTTPException(422, "Could not extract valid patient data from document.")
+
+    # 3. Save to DB
+    service = PatientService(db)
+    # Ensure UID is unique or generated
+    if not patient_data.patient_uid:
+        import uuid
+        patient_data.patient_uid = str(uuid.uuid4())
+
+    try:
+        patient, is_created = await service.upsert_patient_from_ingestion(
+            creator=current_user,
+            data=patient_data,
+            ip_address="doc_ingestion"
+        )
+        
+        status_msg = "Patient created successfully" if is_created else "Patient updated successfully"
+        status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
+        
+        return success_response(
+            status_code=status_code,
+            message=status_msg,
+            data={
+                "patient": jsonable_encoder(PatientResponse.model_validate(patient)),
+                "extracted_data": jsonable_encoder(patient_data),
+                "action": "created" if is_created else "updated"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(400, f"Failed to save extracted data: {str(e)}")
 
 @router.get(
     "",

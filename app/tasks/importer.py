@@ -18,6 +18,7 @@ from app.schemas.patient import PatientCreate
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
 from app.utils.logger import logger
+from app.utils.normalization import normalize_regimen_string
 
 
 def parse_json_column(value):
@@ -136,12 +137,24 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                     diabetes_profile = None
 
                     if primary_condition == "hiv":
+                        # AI Normalization for Regimen
+                        raw_regimen = safe_str(row.get("current_art_regimen"))
+                        normalized_regimen = None
+                        
+                        if raw_regimen:
+                            # Call the AI Normalizer!
+                            try:
+                                normalized_regimen = await normalize_regimen_string(raw_regimen)
+                            except Exception as e:
+                                logger.warning(f"Normalization failed for {raw_regimen}: {e}")
+                                normalized_regimen = raw_regimen
+
                         hiv_profile = HIVProfileCreate(
                             date_of_diagnosis=safe_str(row.get("date_of_diagnosis")),
                             art_start_date=safe_str(row.get("art_start_date")),
                             baseline_viral_load=safe_int(row.get("baseline_viral_load")),
                             baseline_cd4_count=safe_int(row.get("baseline_cd4_count")),
-                            current_art_regimen=safe_str(row.get("current_art_regimen")),
+                            current_art_regimen=normalized_regimen or raw_regimen, # Fallback to raw if normalized is None (though normalizer handles it)
                             last_refill_date=safe_str(row.get("last_refill_date")),
                             refill_months=safe_int(row.get("refill_months")),
                         )

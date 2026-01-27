@@ -36,6 +36,10 @@ jobs:
             echo "Running database migrations..."
             docker compose -f compose.yml exec -T app alembic upgrade head
             
+            # Seed Hackathon Data (Idempotent)
+            echo "Seeding hackathon data..."
+            docker compose -f compose.yml exec -T app python scripts/seed_hackathon_data.py
+            
             # Seed Templates (Idempotent)
             echo "Seeding email templates..."
             docker compose -f compose.yml exec -T app python scripts/seed_templates.py

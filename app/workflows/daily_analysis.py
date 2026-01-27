@@ -73,8 +73,8 @@ class DailyAnalysisWorkflow:
                 patient_id=uuid.UUID(action.target_id),
                 organization_id=context.organization_id,
                 action_type=action.type,
-                status="pending",
-                content=action.details,
+                status=action.status,
+                content=action.content,
                 ai_reasoning=action.reasoning,
                 confidence_score=action.confidence
             )
@@ -109,7 +109,7 @@ class DailyAnalysisWorkflow:
                     status=AlertStatus.PENDING,
                     title=f"AI Agent: {action.type.replace('_', ' ').title()}",
                     description=action.reasoning,
-                    ai_assessment=action.details
+                    ai_assessment=action.content
                 )
                 self.db.add(alert)
                 alert_count += 1
