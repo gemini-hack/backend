@@ -25,7 +25,7 @@ async def normalize_regimen_string(raw_text: str) -> str:
     )
     
     try:
-        # Using generate_response from your AI Service
+        # Using generate_response from AI Service
         response = await gemini_service.generate_response(prompt)
         cleaned = response.strip().replace("\n", "").replace("`", "")
         return cleaned if cleaned != "UNKNOWN" else raw_text

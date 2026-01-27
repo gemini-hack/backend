@@ -69,24 +69,24 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  agent:
-    build:
-      context: .
-      target: runtime
-    command: python -m app.agents.livekit_gemini.main start
-    # volumes:
-    #   - .:/app
-    #   - /app/.venv
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=/app
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
+  # agent:
+  #   build:
+  #     context: .
+  #     target: runtime
+  #   command: python -m app.agents.livekit_gemini.main start
+  #   # volumes:
+  #   #   - .:/app
+  #   #   - /app/.venv
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - PYTHONPATH=/app
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   db:
     image: postgres:16-alpine
