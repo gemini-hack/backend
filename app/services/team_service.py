@@ -319,18 +319,14 @@ class TeamService:
         Patients are unassigned from the team.
         
         Only ORG_OWNER can delete teams.
-        
-        Args:
-            user: The authenticated user (must be ORG_OWNER).
-            team_id: The team ID.
-        
-        Raises:
-            InsufficientPermissionsError: If user is not ORG_OWNER.
-            TeamNotFoundError: If team not found.
-        
-        Complexity: O(n) where n is number of members + patients.
         """
         self._check_org_owner(user)
+
+        team = await Team.fetch_unique(
+            self.db, 
+            id=team_id, 
+            organization_id=user.organization_id
+        )
         
         if not team:
             raise TeamNotFoundError(f"Team with ID {team_id} not found")
@@ -381,13 +377,6 @@ class TeamService:
         
         Returns:
             The updated User object.
-        
-        Raises:
-            InsufficientPermissionsError: If user lacks permissions.
-            TeamNotFoundError: If team not found.
-            MemberNotFoundError: If member user not found in org.
-        
-        Complexity: O(1)
         """
         self._check_org_admin_or_owner(user)
         

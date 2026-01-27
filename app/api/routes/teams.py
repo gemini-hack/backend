@@ -9,6 +9,10 @@ from fastapi import APIRouter, Depends, Query, status, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 
 from app.api.dependencies import CurrentUser, DbSession, require_permission, get_client_ip
+
+from sqlalchemy import func, select
+from app.models.patient import Patient
+
 from app.services.team_service import (
     TeamService,
     TeamNotFoundError,
@@ -110,6 +114,56 @@ async def list_teams(
             skip=skip,
             limit=limit,
         )),
+    )
+
+
+@router.get(
+    "/{team_id}/patients",
+    status_code=status.HTTP_200_OK,
+    summary="List patients assigned to a team",
+    dependencies=[Depends(require_permission("teams:read"))],
+)
+async def list_team_patients(
+    team_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=100, description="Pagination limit"),
+):
+    """
+    List all patients assigned to a specific team.
+    """
+    # 1. Verify Team Exists
+    team = await Team.fetch_unique(db, id=team_id, organization_id=user.organization_id)
+    if not team:
+        raise NotFoundException("Team not found")
+
+    # 2. Fetch Patients (Standard SQLAlchemy Select)
+    stmt = (
+        select(Patient)
+        .where(Patient.team_id == team_id)
+        .order_by(Patient.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    patients = result.scalars().all()
+
+    # 3. Get Total Count (For Pagination)
+    total = await db.scalar(
+        select(func.count()).select_from(Patient).where(Patient.team_id == team_id)
+    )
+
+    # 4. Return
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Team patients retrieved successfully",
+        data={
+            "items": [jsonable_encoder(p) for p in patients],
+            "total": total,
+            "page": (skip // limit) + 1,
+            "size": limit
+        }
     )
 
 
