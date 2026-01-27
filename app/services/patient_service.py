@@ -16,12 +16,104 @@ from app.utils.exceptions import NotFoundException, BadRequestException
 class PatientService(BaseService):
     """Service for managing patient records."""
 
+    async def find_existing_patient(
+        self,
+        organization_id: uuid.UUID,
+        first_name: str,
+        last_name: str,
+        date_of_birth: date,
+        phone: Optional[str] = None
+    ) -> Optional[Patient]:
+        """Find a patient by precise demographic match."""
+        query = select(Patient).where(
+            Patient.organization_id == organization_id,
+            func.lower(Patient.first_name) == first_name.lower().strip(),
+            func.lower(Patient.last_name) == last_name.lower().strip(),
+            Patient.date_of_birth == date_of_birth
+        )
+        result = await self.db.execute(query)
+        match = result.scalars().first()
+        
+        if not match and phone:
+             # Fallback: try matching by phone if names didn't match (optional - usually name+dob is better)
+             # But let's stick to Name+DOB as primary strict match for safety.
+             pass
+             
+        return match
+
+    async def upsert_patient_from_ingestion(
+        self,
+        creator: User,
+        data: PatientCreate,
+        ip_address: Optional[str] = None,
+    ) -> tuple[Patient, bool]:
+        """
+        Create or Update a patient based on demographic matching.
+        Returns: (Patient, is_created)
+        """
+        # 1. Try to find existing
+        existing = await self.find_existing_patient(
+            creator.organization_id,
+            data.first_name,
+            data.last_name,
+            data.date_of_birth
+        )
+        
+        if existing:
+            # UPDATE LOGIC
+            logger.info(f"Ingestion found existing patient {existing.id} for {data.first_name} {data.last_name}")
+            
+            # Update core fields if provided in ingestion (prefer new data?)
+            # Usually for ingestion, we might want to fill MISSING data vs overwrite existing good data.
+            # But let's assume ingestion implies "latest info".
+            if data.phone: existing.phone = data.phone
+            if data.address: existing.address = data.address
+            if data.email: existing.email = data.email
+            
+            # Update/Create Profile
+            # Since data.hiv_profile is a Pydantic model, we can dump it
+            if data.primary_condition == Condition.HIV and data.hiv_profile:
+                if existing.hiv_profile:
+                     # Update existing profile
+                     for k, v in data.hiv_profile.model_dump(exclude_unset=True).items():
+                         setattr(existing.hiv_profile, k, v)
+                else:
+                     # Create new profile
+                     existing.hiv_profile = HIVProfile(**data.hiv_profile.model_dump())
+                     
+            elif data.primary_condition == Condition.HYPERTENSION and data.hypertension_profile:
+                 if existing.hypertension_profile:
+                     for k, v in data.hypertension_profile.model_dump(exclude_unset=True).items():
+                         setattr(existing.hypertension_profile, k, v)
+                 else:
+                     existing.hypertension_profile = HypertensionProfile(**data.hypertension_profile.model_dump())
+            
+            await existing.save(self.db)
+            
+            # Log audit
+            await self._log_audit(
+                user_id=creator.id,
+                organization_id=creator.organization_id,
+                action="patient_updated_via_ingestion",
+                resource_type="patient",
+                resource_id=str(existing.id),
+                details={"source": "document_ingestion"},
+                ip_address=ip_address,
+            )
+            return existing, False
+
+        else:
+            # CREATE NEW
+            new_patient = await self.create_patient(creator, data, ip_address)
+            return new_patient, True
+
     async def create_patient(
         self,
         creator: User,
         data: PatientCreate,
         ip_address: Optional[str] = None,
-    ) -> PatientResponse:
+    ) -> Patient: # Changed return type hint to Patient for internal consistency, though it was PatientResponse
+
         """Create a new patient record with optional condition profiles."""
         
         # Check if patient UID already exists in the organization
@@ -119,7 +211,7 @@ class PatientService(BaseService):
         
         logger.info(f"Patient {data.patient_uid} created by {creator.email}")
         
-        return PatientResponse.model_validate(patient)
+        return patient
 
     async def get_patients(
         self,

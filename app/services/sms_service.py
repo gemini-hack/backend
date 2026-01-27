@@ -30,7 +30,7 @@ class SMSDeliveryError(BaseAPIException):
     def __init__(self, message: str, to_phone: str, original_error: Optional[Exception] = None):
         super().__init__(
             status_code=502,
-            message=f"Failed to send SMS to {to_phone}: {message}"
+            detail=f"Failed to send SMS to {to_phone}: {message}"
         )
         self.to_phone = to_phone
         self.original_error = original_error
@@ -225,4 +225,31 @@ class SMSService:
             return message.sid
             
         except TwilioRestException as e:
+            raise SMSDeliveryError(str(e.msg), to_phone, e)
+
+    async def send_generic_sms(
+        self,
+        to_phone: str,
+        message_body: str,
+        organization_id: str,
+    ) -> str:
+        """
+        Send a generic SMS (e.g., for Engagement Nudges).
+        """
+        if not self.is_configured():
+            raise SMSDeliveryError("SMS service not configured", to_phone)
+            
+        await self._check_rate_limit(organization_id)
+        
+        try:
+            message = self.client.messages.create(
+                to=to_phone,
+                from_=self.from_number,
+                body=message_body,
+            )
+            logger.info(f"Generic SMS sent: {message.sid} to {to_phone}")
+            return message.sid
+            
+        except TwilioRestException as e:
+            logger.error(f"Twilio SMS failed: {e.code} - {e.msg}")
             raise SMSDeliveryError(str(e.msg), to_phone, e)

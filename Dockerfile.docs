@@ -1,0 +1,25 @@
+# Stage 1: Build the static site
+FROM python:3.12-slim as builder
+
+# Install mkdocs and the material theme
+RUN pip install mkdocs-material
+
+# Copy the project files
+COPY . /docs
+WORKDIR /docs
+
+# Build the documentation
+# This generates the 'site' directory
+RUN mkdocs build
+
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
+
+# Copy the build output from the builder stage to Nginx's html directory
+COPY --from=builder /docs/site /usr/share/nginx/html
+
+# Expose port 80
+EXPOSE 80
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -9,6 +9,7 @@ from app.agents.base import BaseWorker
 from app.agents.context import AgentContext, WorkerResult, AgentAction
 from app.models.patient import PatientStatus
 from app.models.conditions import Condition
+from app.core.medical_guidelines import is_regimen_valid
 from app.utils.logger import logger
 
 class HIVWorker(BaseWorker):
@@ -75,7 +76,7 @@ class HIVWorker(BaseWorker):
                     result.proposed_actions.append(AgentAction(
                         type="low_level_viremia_review",
                         target_id=str(patient.id),
-                        details={"viral_load": vl, "status": "LLV"},
+                        content={"viral_load": vl, "status": "LLV"},
                         reasoning=f"Viral Load is {vl} (50-1000). Low level viremia detected. Monitor closely.",
                         confidence=0.8
                     ))
@@ -89,7 +90,7 @@ class HIVWorker(BaseWorker):
                 result.proposed_actions.append(AgentAction(
                     type="defaulter_tracing",
                     target_id=str(patient.id),
-                    details={"last_refill": profile.last_refill_date, "next_refill": profile.next_refill_date},
+                    content={"last_refill": profile.last_refill_date, "next_refill": profile.next_refill_date},
                     reasoning="Patient missed refill date and is now an active defaulter.",
                     confidence=0.9
                 ))
@@ -101,6 +102,32 @@ class HIVWorker(BaseWorker):
                     reasoning="Interrupted in Treatment (IIT) (>28 days since missed refill). High risk of drug resistance.",
                     confidence=1.0
                 ))
+
+            # 3. Regimen Safety Check
+            current_regimen = profile.current_art_regimen
+            
+            if current_regimen:
+                if not is_regimen_valid(current_regimen):
+                    result.flagged_patients.append(patient.id)
+                    result.proposed_actions.append(AgentAction(
+                        type="regimen_optimization",
+                        target_id=str(patient.id),
+                        content={"current_regimen": current_regimen, "issue": "Regimen not in approved Green List"},
+                        reasoning=f"Patient is on '{current_regimen}', which is not a currently approved Green List regimen. Evaluate for switch to TLD or approved alternative.",
+                        confidence=1.0 
+                    ))
+            else:
+                 # Logic for newly identified client with no regimen
+                 if patient.status == PatientStatus.ACTIVE and not profile.art_start_date:
+                     result.flagged_patients.append(patient.id)
+                     result.proposed_actions.append(AgentAction(
+                        type="initiate_art",
+                        target_id=str(patient.id),
+                        content={"recommended": "TDF(300mg)+3TC(300mg)+DTG(50mg)"},
+                        reasoning="Newly identified HIV+ client not yet on ART. Immediate initiation recommended.",
+                        confidence=1.0
+                     ))
+
 
         context.add_worker_result(result)
         return result

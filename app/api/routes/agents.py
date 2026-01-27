@@ -28,11 +28,30 @@ async def list_agent_actions(
     user: CurrentUser,
     db: DbSession,
     limit: int = 50,
+    assigned_to_me: bool = False,
 ):
-    """List recent actions taken by the AI agents."""
-    query = select(AgentAction).where(
+    """
+    List recent actions taken by the AI agents.
+    
+    - **assigned_to_me**: If true, returns only actions for patients assigned to the current user (Physician, Nurse, or Coordinator).
+    """
+    from app.models.patient import Patient
+    from sqlalchemy import or_
+    
+    query = select(AgentAction).join(AgentAction.patient).where(
         AgentAction.organization_id == user.organization_id
-    ).order_by(desc(AgentAction.created_at)).limit(limit)
+    )
+    
+    if assigned_to_me:
+        query = query.where(
+            or_(
+                Patient.primary_physician_id == user.id,
+                Patient.assigned_nurse_id == user.id,
+                Patient.care_coordinator_id == user.id
+            )
+        )
+        
+    query = query.order_by(desc(AgentAction.created_at)).limit(limit)
     
     result = await db.execute(query)
     actions = result.scalars().all()

@@ -27,6 +27,12 @@ from app.api.routes import (
     # Webhooks
     livekit_webhooks_router,
     twilio_webhooks_router,
+    appointments_router,
+    reminders_router,
+    onboarding_router,
+    settings_router,
+    teams_router,
+    analytics_router,
 )
 
 # Main API router
@@ -58,3 +64,7 @@ api_router.include_router(integrations_router)
 # --- 6. Event Webhooks ---
 api_router.include_router(livekit_webhooks_router)
 api_router.include_router(twilio_webhooks_router)
+
+# --- Analytics ---
+api_router.include_router(analytics_router)
+

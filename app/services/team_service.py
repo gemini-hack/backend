@@ -332,30 +332,31 @@ class TeamService:
         """
         self._check_org_owner(user)
         
-        team = await self.get_team(team_id, user.organization_id)
-        
-        # Unassign all members
+        if not team:
+            raise TeamNotFoundError(f"Team with ID {team_id} not found")
+
+        # 1. Delete all members (Users) of this team
+        # Note: This is a strict "Delete Team = Delete Users" policy as requested
         await self.db.execute(
-            User.__table__.update()
+            User.__table__.delete()
             .where(User.team_id == team_id)
-            .values(team_id=None)
         )
         
-        # Unassign all patients
+        # 2. Unassign all patients (keep patients, just remove team link)
         await self.db.execute(
             Patient.__table__.update()
             .where(Patient.team_id == team_id)
             .values(team_id=None)
         )
         
-        # Soft delete by deactivating
-        team.is_active = False
-        await team.save(self.db)
+        # 3. Hard Delete the Team
+        await self.db.delete(team)
+        await self.db.commit()
         
         logger.info(
-            "Team deleted (soft)",
+            "Team and its members deleted",
             extra={
-                "team_id": str(team.id),
+                "team_id": str(team_id),
                 "deleted_by": str(user.id),
             }
         )
