@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.reminder import AppointmentReminder, ReminderChannel, ReminderStatus
-# from app.tasks.reminders import send_reminder  <-- REMOVED TO BREAK CIRCULAR IMPORT
 from app.utils.logger import logger
 
 class ReminderService:
@@ -30,8 +29,12 @@ class ReminderService:
             logger.warning(f"Skipping reminder scheduling for invalid/cancelled appointment: {appointment_id}")
             return
 
-        patient = appointment.patient
         now = datetime.now(timezone.utc)
+        if appointment.scheduled_time < now:
+            logger.info(f"Skipping reminder scheduling for past appointment: {appointment_id}")
+            return
+        
+        patient = appointment.patient
         
         # Determine channels based on patient contact info
         channels = []
@@ -54,7 +57,7 @@ class ReminderService:
             send_time = appointment.scheduled_time - timedelta(hours=24)
 
         # Create reminder record
-        # Fix: Idempotency key now includes timestamp to allow same-day rescheduling
+        # Idempotency key now includes timestamp to allow same-day rescheduling
         idempotency_key = f"rem:{appointment_id}:{send_time.timestamp()}"
         
         reminder = AppointmentReminder(
@@ -69,8 +72,8 @@ class ReminderService:
         )
         
         try:
-            await reminder.insert(self.db)
-            await self.db.commit()
+            self.db.add(reminder)
+            await self.db.flush()
             
             # Schedule the Celery task
             from app.tasks.reminders import send_reminder
@@ -80,15 +83,14 @@ class ReminderService:
             )
             logger.info(f"Scheduled on-demand reminder {reminder.id} for {send_time}")
         except Exception as e:
-            await self.db.rollback()
-            # If it's a duplicate key, we just ignore it (handled by idempotency)
             if "unique constraint" not in str(e).lower():
                 logger.error(f"Failed to schedule reminder: {e}")
+
 
     async def cancel_reminders_for_appointment(self, appointment_id: UUID) -> int:
         """
         Cancel all pending reminders for an appointment.
-        Fixes the 'Ghost Reminder' problem.
+        Used when 'The Hand' reschedules or cancels an appointment.
         """
         # Batch update pending reminders to CANCELLED
         stmt = (
@@ -101,7 +103,7 @@ class ReminderService:
         )
         
         result = await self.db.execute(stmt)
-        await self.db.commit()
+        await self.db.flush()
         
         count = result.rowcount
         if count > 0:
@@ -111,7 +113,7 @@ class ReminderService:
 
     async def reprime_reminders(self, appointment_id: UUID) -> None:
         """
-        Flow for rescheduling: Cancel old and schedule new.
+        Orchestration helper for rescheduling.
         """
         await self.cancel_reminders_for_appointment(appointment_id)
         await self.schedule_reminders_for_appointment(appointment_id)

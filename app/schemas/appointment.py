@@ -1,64 +1,56 @@
-"""
-Appointment Schemas.
-
-Pydantic models for appointment API requests and responses.
-"""
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
-
-from app.models.appointment import AppointmentStatus
-
+from pydantic import BaseModel, Field, ConfigDict, computed_field
+from app.models.appointment import AppointmentStatus, VisitMode
 
 class AppointmentCreate(BaseModel):
-    """Request schema for creating an appointment."""
+    """Schema used by The Hand (Agent) or Frontend to book."""
     patient_id: UUID
     provider_id: Optional[UUID] = None
     scheduled_time: datetime
-    type: str = Field(..., min_length=1, max_length=100, description="e.g., 'Follow-up', 'Lab Review'")
+    appointment_type: str = Field(..., min_length=1, max_length=100)
+    visit_mode: VisitMode = VisitMode.IN_PERSON
     notes: Optional[str] = None
-
-
-class AppointmentUpdate(BaseModel):
-    """Request schema for updating an appointment."""
-    provider_id: Optional[UUID] = None
-    scheduled_time: Optional[datetime] = None
-    type: Optional[str] = Field(None, max_length=100)
-    notes: Optional[str] = None
-    status: Optional[AppointmentStatus] = None
-
 
 class AppointmentResponse(BaseModel):
-    """Response schema for a single appointment."""
     id: UUID
     patient_id: UUID
     organization_id: UUID
     provider_id: Optional[UUID] = None
     scheduled_time: datetime
-    type: str
+    appointment_type: str
+    visit_mode: VisitMode
     status: AppointmentStatus
     notes: Optional[str] = None
-    priority_level: int = 0
-    no_show_count: int = 0
-    reminder_sent_at: Optional[datetime] = None
+    priority_level: int
     created_at: datetime
-    updated_at: datetime
     
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 class AppointmentWithPatient(AppointmentResponse):
-    """Response with embedded patient info."""
-    patient_name: Optional[str] = None
-    patient_phone: Optional[str] = None
+    @computed_field
+    def patient_name(self) -> Optional[str]:
+        if hasattr(self, 'patient') and self.patient:
+            return f"{self.patient.first_name} {self.patient.last_name}"
+        return None
+
+class AppointmentUpdate(BaseModel):
+    """Schema for updating an appointment."""
+    scheduled_time: Optional[datetime] = None
+    appointment_type: Optional[str] = None
+    visit_mode: Optional[VisitMode] = None
+    status: Optional[AppointmentStatus] = None
+    notes: Optional[str] = None
+    priority_level: Optional[int] = Field(None, ge=0, le=10)
+    provider_id: Optional[UUID] = None
 
 
 class AppointmentListResponse(BaseModel):
     """Paginated list of appointments."""
-    appointments: List[AppointmentResponse]
+    items: List[AppointmentWithPatient]
     total: int
-    skip: int
-    limit: int
+    page: int
+    size: int
+    pages: int

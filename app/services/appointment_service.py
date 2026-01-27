@@ -1,60 +1,64 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from app.db.database import async_session_factory
-from app.models.appointment import Appointment, AppointmentStatus
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.appointment import Appointment, AppointmentStatus, VisitMode
+from app.schemas.appointment import AppointmentCreate
 from app.utils.exceptions import NotFoundException, BadRequestException
 
 class AppointmentService:
-    """Service for managing appointments."""
-    
-    @staticmethod
-    async def reschedule_appointment(
-        appointment_id: UUID, 
-        new_start_time: datetime,
-        organization_id: UUID
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create_appointment(
+        self, 
+        data: AppointmentCreate, 
+        organization_id: UUID,
+        created_by_agent: bool = False
     ) -> Appointment:
         """
-        Reschedule an appointment.
-        
-        Business Rules:
-        - Can only reschedule if status is NO_SHOW or CANCELLED (recovery flow)
-        - New time must be in the future
-        - Resets status to SCHEDULED
+        Used by: Frontend AND 'The Hand' (Agents).
         """
-        if new_start_time <= datetime.now(new_start_time.tzinfo):
-             raise BadRequestException("New appointment time must be in the future")
+        # 1. Validation: No past appointments
+        if data.scheduled_time.tzinfo is None:
+             data.scheduled_time = data.scheduled_time.replace(tzinfo=timezone.utc)
+             
+        if data.scheduled_time <= datetime.now(timezone.utc):
+            raise BadRequestException("Appointment time must be in the future")
 
-        async with async_session_factory() as db:
-            appointment = await Appointment.fetch_unique(
-                db,
-                id=appointment_id,
-                organization_id=organization_id
-            )
-            
-            if not appointment:
-                raise NotFoundException("Appointment not found")
-            
-            # Allow recovery from NO_SHOW or CANCELLED
-            if appointment.status not in [AppointmentStatus.NO_SHOW, AppointmentStatus.CANCELLED]:
-                raise BadRequestException(
-                    f"Only missed (NO_SHOW) or cancelled appointments can be rescheduled via this flow. "
-                    f"Current status: {appointment.status.value}"
-                )
-            
-            # Update
-            appointment.scheduled_time = new_start_time
-            appointment.status = AppointmentStatus.SCHEDULED
-            
-            await appointment.save(db)
-            
-            # Re-prime reminders (cancel old, schedule new)
-            from app.services.reminder_service import ReminderService
-            reminder_service = ReminderService(db)
-            await reminder_service.reprime_reminders(appointment.id)
-            
-            return appointment
+        # 2. Create the Record
+        appointment = Appointment(
+            organization_id=organization_id,
+            patient_id=data.patient_id,
+            provider_id=data.provider_id,
+            scheduled_time=data.scheduled_time,
+            appointment_type=data.appointment_type,
+            visit_mode=data.visit_mode,
+            notes=data.notes,
+            # If Agent created it, maybe mark priority or add a note?
+            priority_level=1 if created_by_agent else 0
+        )
+        
+        if created_by_agent:
+            appointment.notes = (appointment.notes or "") + " [Auto-booked by MIRA AI]"
+
+        self.db.add(appointment)
+        await self.db.flush() # Get ID
+        
+        # 3. ORCHESTRATION: Trigger Reminder Creation
+        from app.services.reminder_service import ReminderService
+        reminder_service = ReminderService(self.db)
+        await reminder_service.schedule_reminders_for_appointment(appointment.id)
+        
+        return appointment
+
+    async def get_patient_appointments(self, patient_id: UUID) -> List[Appointment]:
+        """Used by 'The Brain' to check patient history."""
+        query = select(Appointment).where(
+            Appointment.patient_id == patient_id
+        ).order_by(Appointment.scheduled_time.desc())
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()

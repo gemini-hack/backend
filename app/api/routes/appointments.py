@@ -6,6 +6,7 @@ CRUD operations for appointments plus scheduling and status management.
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
+import math
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.encoders import jsonable_encoder
@@ -20,6 +21,7 @@ from app.schemas.appointment import (
     AppointmentUpdate,
     AppointmentResponse,
     AppointmentListResponse,
+    AppointmentWithPatient,
 )
 from app.utils.responses import success_response
 from app.utils.exceptions import NotFoundException, BadRequestException
@@ -44,8 +46,6 @@ async def create_appointment(
 ):
     """
     Create a new appointment.
-    
-    Complexity: O(1) - single insert
     """
     # Verify patient exists and belongs to organization
     patient = await Patient.fetch_unique(
@@ -62,13 +62,14 @@ async def create_appointment(
         organization_id=user.organization_id,
         provider_id=data.provider_id,
         scheduled_time=data.scheduled_time,
-        type=data.type,
+        appointment_type=data.appointment_type,
         notes=data.notes,
         status=AppointmentStatus.SCHEDULED,
+        visit_mode=data.visit_mode,
     )
     await appointment.insert(db)
     
-    # Schedule reminders immediately (fixes Late Booking Gap)
+
     reminder_service = ReminderService(db)
     await reminder_service.schedule_reminders_for_appointment(appointment.id)
     
@@ -121,26 +122,88 @@ async def list_appointments(
     total = await Appointment.query(db).filter(*conditions).count()
     
     # Fetch with pagination
-    appointments = await (
-        Appointment.query(db)
+    stmt = (
+        select(Appointment)
+        .options(selectinload(Appointment.patient))  # Eager load patient
         .filter(*conditions)
-        .order_by(Appointment.scheduled_time, desc=False)
+        .order_by(Appointment.scheduled_time)
         .offset(skip)
         .limit(limit)
-        .all()
+
     )
+    
+    result = await db.execute(stmt)
+    appointments = result.scalars().all()
+
+    current_page = (skip // limit) + 1 if limit > 0 else 1
+    total_pages = math.ceil(total / limit) if limit > 0 else 1
+
     
     return success_response(
         status_code=status.HTTP_200_OK,
         message="Appointments retrieved successfully",
         data=jsonable_encoder(AppointmentListResponse(
-            appointments=[AppointmentResponse.model_validate(a) for a in appointments],
+            items=[AppointmentResponse.model_validate(a) for a in appointments],
             total=total,
-            skip=skip,
-            limit=limit,
+            page=current_page,
+            pages=total_pages,
+            size=limit,
         )),
     )
 
+
+@router.get(
+    "/resolved",
+    status_code=status.HTTP_200_OK,
+    response_model=AppointmentListResponse,
+    summary="List resolved (completed) cases",
+    dependencies=[Depends(require_permission("appointments:read"))],
+)
+async def list_resolved_cases(
+    user: CurrentUser,
+    db: DbSession,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+):
+    """
+    Get a list of all resolved (COMPLETED) appointments.
+    """
+    # Filter for COMPLETED status
+    conditions = [
+        Appointment.organization_id == user.organization_id,
+        Appointment.status == AppointmentStatus.COMPLETED
+    ]
+
+    total = await Appointment.query(db).filter(*conditions).count()
+
+    stmt = (
+        select(Appointment)
+        .options(selectinload(Appointment.patient))
+        .filter(*conditions)
+        .order_by(Appointment.scheduled_time.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(stmt)
+    appointments = result.scalars().all()
+
+    # Pagination math
+    import math
+    page_num = (skip // limit) + 1 if limit > 0 else 1
+    total_pages = math.ceil(total / limit) if limit > 0 else 0
+
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message="Resolved cases retrieved",
+        data=jsonable_encoder(AppointmentListResponse(
+            items=[AppointmentWithPatient.model_validate(a) for a in appointments],
+            total=total,
+            page=page_num,
+            size=limit,
+            pages=total_pages
+        )),
+    )
 
 @router.get(
     "/{appointment_id}",

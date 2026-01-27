@@ -11,6 +11,10 @@ class AppointmentStatus(str, enum.Enum):
     CANCELLED = "cancelled"
     NO_SHOW = "no_show"
 
+class VisitMode(str, enum.Enum):
+    IN_PERSON = "in_person"
+    TELEHEALTH = "telehealth"
+
 class Appointment(BaseModel):
     """Appointment model for patient visits."""
     __tablename__ = "appointments"
@@ -21,17 +25,20 @@ class Appointment(BaseModel):
     provider_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     
     scheduled_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    type: Mapped[str] = mapped_column(String(100))  # e.g., "Follow-up", "Lab Review"
+    
+    appointment_type: Mapped[str] = mapped_column(String(100))  # e.g., "Viral Load Check", "Drug Refill"
+    
+    # for AI Context (Brain needs to know if patient is coming physically)
+    visit_mode: Mapped[VisitMode] = mapped_column(Enum(VisitMode), default=VisitMode.IN_PERSON)
+    
     status: Mapped[AppointmentStatus] = mapped_column(Enum(AppointmentStatus), default=AppointmentStatus.SCHEDULED)
     notes: Mapped[str | None] = mapped_column(Text)
     
-    # Priority & Escalation (0 = normal, higher = more urgent)
-    priority_level: Mapped[int] = mapped_column(Integer, default=0, index=True)
-    no_show_count: Mapped[int] = mapped_column(Integer, default=0)
-    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Logic Fields for Agents
+    priority_level: Mapped[int] = mapped_column(Integer, default=0) # 0=Normal, 1=High (Critic flagged)
     
     # Relationships
-    patient = relationship("Patient")
+    patient = relationship("Patient", back_populates="appointments")
     provider = relationship("User")
     organization = relationship("Organization")
     reminders = relationship("AppointmentReminder", back_populates="appointment", cascade="all, delete-orphan")
