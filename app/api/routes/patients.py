@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 from app.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.orm import selectinload
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 
@@ -261,11 +261,28 @@ async def get_patient(
     """Get a patient by ID."""
     from app.schemas.patient import PatientDetailResponse
     
-    service = PatientService(db)
-    patient = await service.get_patient_by_id(
-        patient_id=patient_id,
-        organization_id=user.organization_id,
+    stmt = (
+        select(Patient)
+        .options(
+            # Load the specialized profiles to prevent "MissingGreenlet" error
+            selectinload(Patient.hiv_profile),
+            selectinload(Patient.hypertension_profile),
+            selectinload(Patient.diabetes_profile),
+            selectinload(Patient.scheduled_checks),
+            selectinload(Patient.team),             # If you show team details
+            selectinload(Patient.primary_provider)  # If you show doctor name
+        )
+        .where(
+            Patient.id == patient_id,
+            Patient.organization_id == user.organization_id
+        )
     )
+    
+    result = await db.execute(stmt)
+    patient = result.scalar_one_or_none()
+    
+    if not patient:
+        raise NotFoundException("Patient not found")
     return success_response(
         status_code=status.HTTP_200_OK,
         message="Patient retrieved successfully",
