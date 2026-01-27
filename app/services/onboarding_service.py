@@ -7,6 +7,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.user import Organization
 from app.schemas.onboarding import OnboardingCompleteRequest
+from app.utils.exceptions import NotFoundException, BadRequestException
 from app.utils.logger import logger
 
 
@@ -23,7 +24,7 @@ class OnboardingService:
         )
         org = result.scalar_one_or_none()
         if not org:
-            raise ValueError("Organization not found")
+            raise NotFoundException("Organization not found")
         return org
     
     async def get_status(self, org_id: UUID) -> dict:
@@ -53,12 +54,13 @@ class OnboardingService:
             Completion result dict
             
         Raises:
-            ValueError: If already onboarded
+            BadRequestException: If already onboarded
+            NotFoundException: If organization not found
         """
         org = await self.get_organization(org_id)
         
         if org.is_onboarded:
-            raise ValueError("Onboarding already completed")
+            raise BadRequestException("Onboarding already completed")
         
         # Default to UTC if not provided
         tz = request.timezone or "UTC"

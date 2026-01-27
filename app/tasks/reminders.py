@@ -18,6 +18,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.patient import Patient
 from app.models.reminder import AppointmentReminder, ReminderChannel, ReminderStatus
 from app.services.notification_manager import NotificationManager
+# from app.services.reminder_service import ReminderService  <-- MOVED TO TASK
 from app.utils.logger import logger
 
 
@@ -59,61 +60,17 @@ def schedule_daily_reminders():
             
             reminders_created = 0
             
-            for appt in appointments:
-                # Check if reminder already exists
-                existing = await AppointmentReminder.fetch_unique(
-                    db, 
-                    appointment_id=appt.id,
-                    status=ReminderStatus.SCHEDULED
-                )
-                if existing:
-                    continue
-                
-                patient = appt.patient
-                
-                # Determine channels based on patient contact info
-                channels = []
-                if patient.email:
-                    channels.append(ReminderChannel.EMAIL.value)
-                if patient.phone:
-                    channels.append(ReminderChannel.SMS.value)
-                
-                if not channels:
-                    logger.warning(f"Patient {patient.id} has no contact methods, skipping reminder")
-                    continue
-                
-                # Calculate send time (24h before or immediately if < 24h)
-                hours_until = (appt.scheduled_time - now).total_seconds() / 3600
-                if hours_until <= 24:
-                    send_time = now + timedelta(minutes=5)  # Send soon
-                else:
-                    send_time = appt.scheduled_time - timedelta(hours=24)
-                
-                # Create reminder record
-                idempotency_key = f"reminder:{appt.id}:{send_time.date().isoformat()}"
-                
-                reminder = AppointmentReminder(
-                    appointment_id=appt.id,
-                    patient_id=patient.id,
-                    organization_id=appt.organization_id,
-                    channels=channels,
-                    scheduled_send_time=send_time,
-                    status=ReminderStatus.SCHEDULED,
-                    idempotency_key=idempotency_key,
-                    created_by_agent="schedule_daily_reminders",
-                )
-                await reminder.insert(db)
-                reminders_created += 1
-                
-                # Schedule the send task at the appropriate time
-                send_reminder.apply_async(
-                    args=[str(reminder.id)],
-                    eta=send_time,
-                )
-                
-                logger.info(f"Scheduled reminder {reminder.id} for {send_time}")
+            results_count = 0
+            from app.services.reminder_service import ReminderService
+            reminder_service = ReminderService(db)
             
-            logger.info(f"Created {reminders_created} new reminders")
+            for appt in appointments:
+                # Use centralized service to handle logic
+                # It handles checking for status and creating if needed
+                await reminder_service.schedule_reminders_for_appointment(appt.id)
+                results_count += 1
+            
+            logger.info(f"Daily sweep processed {results_count} appointments")
     
     try:
         asyncio.run(_schedule())

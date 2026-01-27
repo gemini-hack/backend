@@ -221,3 +221,34 @@ class EmailService:
         await self._send(to_email, subject, html)
         return True
 
+    async def send_calendar_auth_email(
+        self,
+        to_email: str,
+        user_first_name: str,
+        auth_url: str,
+    ):
+        """Send calendar authentication email."""
+        context = {
+            "first_name": user_first_name,
+            "auth_url": auth_url,
+            "app_name": settings.APP_NAME
+        }
+        subject, html = await self._get_rendered_template("calendar_auth", context)
+        
+        # Fallback if template not in DB
+        if not html:
+            subject = "Action Required: Connect your Google Calendar"
+            html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Connect your Calendar</h2>
+                <p>Hello {user_first_name},</p>
+                <p>To prevent double-booking, please authorize MIRA to access your Google Calendar availability.</p>
+                <p style="text-align: center; margin: 30px 0;">
+                    <a href="{auth_url}" style="padding: 12px 24px; background-color: #4285F4; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Connect Google Calendar</a>
+                </p>
+                <p>This link expires in 10 minutes for security.</p>
+                <p>If you did not request this, please ignore this email.</p>
+            </div>
+            """
+        
+        await self._send(to_email, subject, html)

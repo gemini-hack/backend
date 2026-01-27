@@ -48,6 +48,19 @@ from app.schemas.patient import (
     PatientListResponse,
 )
 
+from app.schemas.calendar import (
+    # Calendar Integration
+    CalendarProvider,
+    IntegrationStatus,
+    CalendarStatusResponse,
+    InitiateAuthResponse,
+    DisconnectResponse,
+    CalendarListItem,
+    CalendarListResponse,
+    BusyPeriod,
+    BusyPeriodsResponse,
+)
+
 __all__ = [
     # Registration
     "RegisterRequest",
@@ -94,4 +107,15 @@ __all__ = [
     "PatientCreate",
     "PatientResponse",
     "PatientListResponse",
+    
+    # Calendar Integration
+    "CalendarProvider",
+    "IntegrationStatus",
+    "CalendarStatusResponse",
+    "InitiateAuthResponse",
+    "DisconnectResponse",
+    "CalendarListItem",
+    "CalendarListResponse",
+    "BusyPeriod",
+    "BusyPeriodsResponse",
 ]

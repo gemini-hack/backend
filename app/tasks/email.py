@@ -95,3 +95,32 @@ def send_password_reset_email_task(self, to_email: str, reset_token: str):
     run_async(run_task())
     logger.info(f"Password reset email sent successfully to {to_email}")
     return {"status": "success", "email": to_email}
+@celery_app.task(
+    bind=True,
+    max_retries=5,
+    default_retry_delay=60,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    acks_late=True,
+)
+def send_calendar_auth_email_task(
+    self,
+    to_email: str,
+    user_first_name: str,
+    auth_url: str,
+):
+    """Send calendar authentication email. Failed messages go to DLQ."""
+    logger.info(f"[Attempt {self.request.retries + 1}/{self.max_retries + 1}] Sending calendar auth email to {to_email}")
+    
+    async def run_task():
+        async with get_celery_session() as session:
+            service = EmailService(session)
+            await service.send_calendar_auth_email(
+                to_email, user_first_name, auth_url
+            )
+    
+    run_async(run_task())
+    logger.info(f"Calendar auth email sent successfully to {to_email}")
+    return {"status": "success", "email": to_email}

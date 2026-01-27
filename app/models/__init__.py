@@ -1,4 +1,5 @@
 from app.models.patient import Patient, HealthReading
+from app.models.calendar import CalendarIntegration, CalendarProvider, IntegrationStatus
 from app.models.user import User, Organization, Team
 from app.models.agent import Alert, AgentAction, ScheduledCheck
 from app.models.conditions import Condition, HIVProfile, HypertensionProfile, DiabetesProfile
@@ -27,4 +28,7 @@ __all__ = [
     "AppointmentReminder",
     "ReminderChannel",
     "ReminderStatus",
+    "CalendarIntegration",
+    "CalendarProvider",
+    "IntegrationStatus",
 ]

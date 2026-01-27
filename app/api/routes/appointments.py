@@ -24,6 +24,7 @@ from app.schemas.appointment import (
 from app.utils.responses import success_response
 from app.utils.exceptions import NotFoundException, BadRequestException
 from app.utils.logger import logger
+from app.services.reminder_service import ReminderService
 
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
@@ -66,6 +67,10 @@ async def create_appointment(
         status=AppointmentStatus.SCHEDULED,
     )
     await appointment.insert(db)
+    
+    # Schedule reminders immediately (fixes Late Booking Gap)
+    reminder_service = ReminderService(db)
+    await reminder_service.schedule_reminders_for_appointment(appointment.id)
     
     logger.info(f"Appointment created: {appointment.id} for patient {patient.id}")
     
@@ -189,13 +194,21 @@ async def update_appointment(
     if not appointment:
         raise NotFoundException("Appointment not found")
     
-    # Update fields
+    # Check if time changed to re-prime reminders
+    old_time = appointment.scheduled_time
     update_data = data.model_dump(exclude_unset=True)
+    new_time = update_data.get("scheduled_time")
+    
     for field, value in update_data.items():
         if hasattr(appointment, field):
             setattr(appointment, field, value)
     
     await appointment.save(db)
+    
+    # If time changed, re-prime (cancel old, schedule new)
+    if new_time and new_time != old_time:
+        reminder_service = ReminderService(db)
+        await reminder_service.reprime_reminders(appointment.id)
     
     logger.info(f"Appointment {appointment_id} updated")
     
@@ -335,6 +348,10 @@ async def cancel_appointment(
     
     appointment.status = AppointmentStatus.CANCELLED
     await appointment.save(db)
+    
+    # Cancel associated reminders (fixes Ghost Reminders)
+    reminder_service = ReminderService(db)
+    await reminder_service.cancel_reminders_for_appointment(appointment.id)
     
     logger.info(f"Appointment {appointment_id} cancelled")
     

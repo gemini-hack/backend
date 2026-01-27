@@ -36,6 +36,8 @@ dependencies = [
     "pandas>=2.3.3",
     "mkdocs-material",
     "httpx>=0.28.1",
+    # Retry/Resilience
+    "tenacity>=8.2.0",
     # SMS (Twilio)
     "twilio>=9.0.0",
 ]
