@@ -33,7 +33,7 @@ class DisengagementWorker(BaseWorker):
                     type="onboarding_reminder",
                     target_id=str(patient.id),
                     reasoning="Patient has never submitted a health reading since registration.",
-                    details={"days_missing": "infinity"}
+                    content={"days_missing": "infinity"}
                 ))
                 continue
                 
@@ -44,7 +44,7 @@ class DisengagementWorker(BaseWorker):
                     type="engagement_nudge",
                     target_id=str(patient.id),
                     reasoning=f"Patient hasn't submitted a reading in {days_since} days.",
-                    details={"days_missing": days_since}
+                    content={"days_missing": days_since}
                 ))
                 
         context.add_worker_result(result)

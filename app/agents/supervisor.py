@@ -41,16 +41,32 @@ class SupervisorAgent(BaseSupervisor):
         patients = result.scalars().all()
         context.set("patients", patients)
         
-        # 2. Run Workers
+        # 2. Run Workers with Exponential Backoff
+        base_delay = 4  # Base delay in seconds
+        max_retries = 3
+        
         for worker in self.workers:
-            try:
-                logger.info(f"📊 [{worker.name.upper()}] Specialist analyzing patient data...")
-                await worker.run(context)
-                # Sleep for 4 seconds to stay under the ~15 RPM limit (60s / 15 = 4s)
-                logger.debug("Sleeping for 4s to respect Gemini Rate Limit...")
-                await asyncio.sleep(4)
-            except Exception as e:
-                logger.error(f"Specialist {worker.name} failed during rounds: {str(e)}")
+            retries = 0
+            delay = base_delay
+            
+            while retries <= max_retries:
+                try:
+                    logger.info(f"📊 [{worker.name.upper()}] Specialist analyzing patient data...")
+                    await worker.run(context)
+                    # Sleep to respect rate limits
+                    logger.debug(f"Sleeping for {delay}s to respect Gemini Rate Limit...")
+                    await asyncio.sleep(delay)
+                    break  # Success, move to next worker
+                except Exception as e:
+                    error_str = str(e)
+                    if "RESOURCE_EXHAUSTED" in error_str and retries < max_retries:
+                        retries += 1
+                        delay = base_delay * (2 ** retries)  # Exponential backoff: 8s, 16s, 32s
+                        logger.warning(f"Rate limit hit for {worker.name}. Retry {retries}/{max_retries} after {delay}s backoff...")
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(f"Specialist {worker.name} failed during rounds: {error_str}")
+                        break  # Move to next worker on non-retryable error
 
         # 3. Synthesize Decisions (The Brain)
         await self._synthesize_decisions(context)

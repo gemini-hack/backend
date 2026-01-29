@@ -34,7 +34,7 @@ class AgentContext(BaseModel):
     worker_results: Dict[str, WorkerResult] = Field(default_factory=dict)
     
     # Final decisions made by the Supervisor
-    final_actions: List[AgentAction] = Field(default_factory=dict)
+    final_actions: List[AgentAction] = Field(default_factory=list)
     
     def set(self, key: str, value: Any):
         self.data[key] = value

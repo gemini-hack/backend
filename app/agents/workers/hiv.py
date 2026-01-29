@@ -68,7 +68,7 @@ class HIVWorker(BaseWorker):
                     result.proposed_actions.append(AgentAction(
                         type="unsuppressed_vl_intervention",
                         target_id=str(patient.id),
-                        details={"viral_load": vl, "status": "UNSUPPRESSED"},
+                        content={"viral_load": vl, "status": "UNSUPPRESSED"},
                         reasoning=f"Viral Load is {vl} (>1000). Patient is unsuppressed. Requires urgent adherence counseling.",
                         confidence=1.0
                     ))
