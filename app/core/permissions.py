@@ -17,6 +17,8 @@ PERM_PATIENTS_READ = "patients:read"
 PERM_PATIENTS_UPDATE = "patients:update"
 PERM_PATIENTS_DELETE = "patients:delete"
 
+PERM_ANALYTICS_READ = "analytics:read"
+
 PERM_APPOINTMENTS_CREATE = "appointments:create"
 PERM_APPOINTMENTS_READ = "appointments:read"
 PERM_APPOINTMENTS_UPDATE = "appointments:update"
@@ -45,6 +47,8 @@ ROLE_PERMISSIONS = {
         PERM_INVITATIONS_CREATE,
         PERM_INVITATIONS_READ,
         PERM_INVITATIONS_REVOKE,
+
+        PERM_ANALYTICS_READ,
         
         # Reports
         PERM_REPORTS_READ,

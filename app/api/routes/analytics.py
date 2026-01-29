@@ -14,11 +14,12 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
     status_code=status.HTTP_200_OK,
     response_model=AdminDashboardResponse,
     summary="Get admin dashboard statistics",
-    dependencies=[Depends(require_permission("reports:read"))],
+    dependencies=[Depends(require_permission("analytics:read"))],
 )
 async def get_admin_dashboard(
     user: CurrentUser,
     db: DbSession,
+    _: bool = Depends(require_permission("analytics:read")),
 ):
     """
     Get high-level statistics for the admin dashboard.
