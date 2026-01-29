@@ -3,16 +3,26 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.conditions import Condition
+from app.models.conditions import Condition, WHOStage, FunctionalStatus, RegimenLine, EnrollmentSetting
 
 class HIVProfileBase(BaseModel):
     """Base schema for HIV Profile."""
     date_of_diagnosis: Optional[date] = None
+    enrollment_setting: Optional[EnrollmentSetting] = None
+
     art_start_date: Optional[date] = None
+    initial_art_regimen: Optional[str] = None
+
+    # Clinical Status
+    who_clinical_stage: Optional[WHOStage] = None
+    functional_status: Optional[FunctionalStatus] = None
+
+    current_art_regimen: Optional[str] = None
+    regimen_line: Optional[RegimenLine] = None
+
+    # Labs & Refills
     baseline_viral_load: Optional[int] = None
     baseline_cd4_count: Optional[int] = None
-    initial_art_regimen: Optional[str] = None
-    current_art_regimen: Optional[str] = None
     
     last_refill_date: Optional[date] = None
     refill_months: Optional[int] = None

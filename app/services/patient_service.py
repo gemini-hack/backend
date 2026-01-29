@@ -172,7 +172,7 @@ class PatientService(BaseService):
             monitoring_frequency=data.monitoring_frequency,
             preferred_contact_method=data.preferred_contact_method,
             preferred_language=data.preferred_language,
-            status=PatientStatus.ACTIVE,
+            status=data.status if data.status else PatientStatus.ACTIVE,
             team_id=data.team_id,
             provider_id=data.provider_id,
         )
@@ -317,6 +317,7 @@ class PatientService(BaseService):
         patient_id: uuid.UUID,
         organization_id: uuid.UUID,
         data: dict,
+        user: Optional[User] = None,
     ) -> Patient:
         """Update a patient record."""
         patient = await Patient.fetch_one_with(

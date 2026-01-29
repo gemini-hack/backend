@@ -98,7 +98,7 @@ class FollowUpSpecialist(BaseWorker):
             result.proposed_actions.append(AgentAction(
                 type="schedule_appointment_reminder",
                 target_id=str(patient.id),
-                details={
+                content={
                     "appointment_id": str(appointment.id),
                     "channels": [c.value for c in strategy["channels"]],
                     "send_time": strategy["send_time"].isoformat(),

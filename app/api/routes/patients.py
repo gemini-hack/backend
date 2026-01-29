@@ -3,13 +3,14 @@ import os
 import uuid
 from typing import Optional
 from uuid import UUID
-from app.db.database import get_db
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, UploadFile, File, BackgroundTasks
-from fastapi.encoders import jsonable_encoder
 
+from app.db.database import get_db
 from app.api.dependencies import (
     CurrentUser,
     DbSession,
@@ -17,16 +18,30 @@ from app.api.dependencies import (
     require_permission,
 )
 from app.core.redis import RedisManager
-from app.models.patient import PatientStatus
+from app.utils.responses import success_response
+from app.utils.exceptions import NotFoundException
+
+from app.models.patient import Patient, PatientStatus 
 from app.models.conditions import Condition
-from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientUpdate
+from app.schemas.patient import (
+    PatientCreate, 
+    PatientResponse, 
+    PatientListResponse, 
+    PatientUpdate,
+    PatientDetailResponse 
+)
+from app.schemas.agent import AgentActionResponse
+
+
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
-from app.agents.context import AgentAction 
-from app.schemas.agent import AgentActionResponse
 from app.services.ingestion_service import IngestionService
+
+from app.services.team_service import PatientNotFoundError 
+
+
 from app.tasks.importer import process_patient_batch_import
-from app.utils.responses import success_response
+from app.models.agent import AgentAction
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -45,7 +60,6 @@ async def create_patient(
 ):
     """Create a new patient record."""
     service = PatientService(db)
-    # Service now returns ORM object
     patient_orm = await service.create_patient(
         creator=user,
         data=data,
@@ -70,21 +84,16 @@ async def ingest_medical_document(
     if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
         raise HTTPException(400, "Invalid file type. Use JPG, PNG, or PDF.")
 
-    # 1. Read Bytes
     content = await file.read()
     
-    # 2. AI Processing
     ingestor = IngestionService(db)
     patient_data = await ingestor.parse_document_to_patient(content, file.content_type)
     
     if not patient_data:
         raise HTTPException(422, "Could not extract valid patient data from document.")
 
-    # 3. Save to DB
     service = PatientService(db)
-    # Ensure UID is unique or generated
     if not patient_data.patient_uid:
-        import uuid
         patient_data.patient_uid = str(uuid.uuid4())
 
     try:
@@ -260,18 +269,19 @@ async def get_patient(
     db: DbSession,
 ):
     """Get a patient by ID."""
-    from app.schemas.patient import PatientDetailResponse
     
     stmt = (
         select(Patient)
         .options(
-            # Load the specialized profiles to prevent "MissingGreenlet" error
+            # Load the specialized profiles
             selectinload(Patient.hiv_profile),
             selectinload(Patient.hypertension_profile),
             selectinload(Patient.diabetes_profile),
             selectinload(Patient.scheduled_checks),
+            selectinload(Patient.alerts),           # Required for PatientDetailResponse
+            selectinload(Patient.agent_actions),    # Required for PatientDetailResponse
             selectinload(Patient.team),             # If you show team details
-            selectinload(Patient.primary_provider)  # If you show doctor name
+            selectinload(Patient.primary_physician)  # If you show doctor name
         )
         .where(
             Patient.id == patient_id,
@@ -283,7 +293,7 @@ async def get_patient(
     patient = result.scalar_one_or_none()
     
     if not patient:
-        raise NotFoundException("Patient not found")
+        raise HTTPException(status_code=404, detail="Patient not found")
     return success_response(
         status_code=status.HTTP_200_OK,
         message="Patient retrieved successfully",
@@ -309,6 +319,7 @@ async def update_patient(
         patient_id=patient_id,
         organization_id=user.organization_id,
         data=data.model_dump(exclude_unset=True),
+        user=user
     )
     return success_response(
         status_code=status.HTTP_200_OK,

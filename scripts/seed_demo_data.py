@@ -7,7 +7,7 @@ Creates:
 3. 5 HIV patients with different clinical scenarios
 
 Run via Docker:
-    docker compose exec app python scripts/seed_hackathon_data.py
+    docker compose exec app python scripts/seed_demo_data.py
 """
 import asyncio
 import uuid
@@ -21,12 +21,12 @@ from app.models.conditions import Condition, HIVProfile, RegimenLine
 from app.models.appointment import Appointment, AppointmentStatus
 
 
-async def seed_hackathon_data():
-    """Create hackathon data for testing."""
+async def seed_demo_data():
+    """Create demo data for testing."""
     
     async with async_session_factory() as db:
         print("=" * 60)
-        print("🏥 HACKATHON SEED")
+        print("🏥 MIRA DEMO SEED")
         print("=" * 60)
         
         # -----------------------------------------------------------------
@@ -300,4 +300,4 @@ async def seed_hackathon_data():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed_hackathon_data())
+    asyncio.run(seed_demo_data())

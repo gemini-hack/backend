@@ -20,6 +20,7 @@ from app.api.routes.calls import router as calls_router
 
 # External Integrations
 from .integrations import router as integrations_router
+from app.api.routes.ehr import router as ehr_router
 
 # Webhooks & System
 from app.api.routes.livekit_webhooks import router as livekit_webhooks_router
@@ -53,4 +54,5 @@ __all__ = [
     "settings_router",
     "teams_router",
     "analytics_router",
+    "ehr_router",
 ]

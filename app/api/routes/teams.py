@@ -1,18 +1,15 @@
 """
 Teams Router - API endpoints for team/department management.
 """
-
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func, select
 
 from app.api.dependencies import CurrentUser, DbSession, require_permission, get_client_ip
-
-from sqlalchemy import func, select
 from app.models.patient import Patient
-
 from app.services.team_service import (
     TeamService,
     TeamNotFoundError,
@@ -22,13 +19,9 @@ from app.services.team_service import (
     PatientNotFoundError,
 )
 from app.schemas.teams import (
-    TeamCreate,
-    TeamUpdate,
-    TeamResponse,
-    TeamDetailResponse,
-    TeamListResponse,
-    AddMemberRequest,
-    AssignPatientRequest,
+    TeamCreate, TeamUpdate, TeamResponse,
+    TeamDetailResponse, TeamListResponse,
+    AddMemberRequest, AssignPatientRequest,
     BulkAssignPatientsRequest,
 )
 from app.schemas.auth import InviteWorkerRequest
@@ -133,12 +126,13 @@ async def list_team_patients(
     """
     List all patients assigned to a specific team.
     """
-    # 1. Verify Team Exists
-    team = await Team.fetch_unique(db, id=team_id, organization_id=user.organization_id)
-    if not team:
-        raise NotFoundException("Team not found")
+    service = TeamService(db)
 
-    # 2. Fetch Patients (Standard SQLAlchemy Select)
+    try:
+        await service.get_team(team_id, user.organization_id)
+    except TeamNotFoundError:
+        raise HTTPException(status_code=404, detail="Team not found")
+
     stmt = (
         select(Patient)
         .where(Patient.team_id == team_id)
@@ -149,12 +143,9 @@ async def list_team_patients(
     result = await db.execute(stmt)
     patients = result.scalars().all()
 
-    # 3. Get Total Count (For Pagination)
     total = await db.scalar(
         select(func.count()).select_from(Patient).where(Patient.team_id == team_id)
     )
-
-    # 4. Return
     return success_response(
         status_code=status.HTTP_200_OK,
         message="Team patients retrieved successfully",
@@ -408,7 +399,7 @@ async def remove_member(
     "/{team_id}/invitations",
     status_code=status.HTTP_201_CREATED,
     summary="Invite new worker to team",
-    description="Invite a NEW worker via email and assign them to this team automatically upon acceptance. Organization owners and admins only.",
+    description="Admin/Owner Only: Invite a NEW worker.",
 )
 async def invite_worker_to_team(
     request: Request,
@@ -418,32 +409,38 @@ async def invite_worker_to_team(
     db: DbSession,
 ):
     """Invite a new worker directly to this team."""
-    # Ensure team_id in URL matches body
+
+    if user.role not in [UserRole.ORG_OWNER, UserRole.ORG_ADMIN]:
+         raise HTTPException(
+             status_code=status.HTTP_403_FORBIDDEN, 
+             detail="Only Organization Admins can invite new workers."
+         )
+
     data.team_id = team_id
     
     # Verify team exists
     team_service = TeamService(db)
-    await team_service.get_team(team_id, user.organization_id)
+    try:
+        await team_service.get_team(team_id, user.organization_id)
+    except TeamNotFoundError:
 
-    # Use UserService to send invite
+        raise HTTPException(status_code=404, detail="Team not found")
+
     user_service = UserService(db)
-    
-    # Check permissions (only admins/owners)
-    if user.role not in ["org_owner", "org_admin"]:
-         raise HTTPException(status_code=403, detail="Only admins can invite members")
-    
-    result = await user_service.invite_worker(
-        inviter=user,
-        data=data,
-        ip_address=get_client_ip(request),
-    )
+    try:
+        result = await user_service.invite_worker(
+            inviter=user,
+            data=data,
+            ip_address=get_client_ip(request),
+        )
+    except Exception as e:
+        return fail_response(status.HTTP_400_BAD_REQUEST, str(e))
     
     return success_response(
         status_code=status.HTTP_201_CREATED,
         message="Invitation sent successfully",
         data=jsonable_encoder(result),
     )
-
 
 
 # ============== Patient Assignment ==============

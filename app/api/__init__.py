@@ -23,6 +23,7 @@ from app.api.routes import (
     
     # External Integrations
     integrations_router,
+    ehr_router,
     
     # Webhooks
     livekit_webhooks_router,
@@ -60,6 +61,7 @@ api_router.include_router(calls_router)
 
 # --- 5. External Integrations ---
 api_router.include_router(integrations_router)
+api_router.include_router(ehr_router)
 
 # --- 6. Event Webhooks ---
 api_router.include_router(livekit_webhooks_router)
