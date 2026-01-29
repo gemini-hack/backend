@@ -12,7 +12,6 @@ from app.models.agent import Alert, AgentAction, AlertStatus
 from app.schemas.agent import AlertResponse, AgentActionResponse
 from app.schemas.auth import OrganizationResponse
 from app.models.user import Organization
-from app.workflows.daily_analysis import DailyAnalysisWorkflow
 from app.utils.responses import success_response
 from sqlalchemy import select, desc
 
@@ -95,6 +94,7 @@ async def trigger_analysis_rounds(
     db: DbSession,
 ):
     """Manually trigger a morning rounds analysis for the organization."""
+    from app.workflows.daily_analysis import DailyAnalysisWorkflow
     workflow = DailyAnalysisWorkflow(db)
     background_tasks.add_task(workflow.execute_for_org, user.organization_id)
     

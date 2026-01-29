@@ -32,7 +32,11 @@ jobs:
             echo "Rebuilding and restarting containers..."
             docker compose -f compose.yml up -d --build --force-recreate
             
-            # Run Migrations
+            # === TEMPORARY FIX: Reset database (REMOVE AFTER FIRST SUCCESSFUL DEPLOY) ===
+            echo "🔧 TEMPORARY: Resetting database for migration fix..."
+            docker compose -f compose.yml exec -T db psql -U user -d mira_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO user;" || true
+            
+            # Run Migrations (fresh start)
             echo "Running database migrations..."
             docker compose -f compose.yml exec -T app alembic upgrade head
             
