@@ -22,7 +22,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 
 
 async def seed_hackathon_data():
-    """Create hackathon data for testing."""
+    """Create hackathon data for testing (Idempotent)."""
     
     async with async_session_factory() as db:
         print("=" * 60)
@@ -32,80 +32,126 @@ async def seed_hackathon_data():
         # -----------------------------------------------------------------
         # 1. ORGANIZATION
         # -----------------------------------------------------------------
-        org_id = uuid.uuid4()
-        org = Organization(
-            id=org_id,
-            name="Lagos General Hospital",
-            type="hospital",
-            email="admin@lagosgeneralhospital.ng",
-            phone="+2349012345678",
-            license_number="LAGOS-HIV-2024-001",
-            is_active=True,
-            is_onboarded=True,
-            disease_specializations=["hiv"],
-        )
-        db.add(org)
-        await db.flush()
-        print(f"\n✅ Organization: {org.name}")
+        org_email = "admin@lagosgeneralhospital.ng"
+        
+        existing_org = await Organization.fetch_unique(db, email=org_email)
+        if existing_org:
+            org = existing_org
+            org_id = org.id
+            print(f"\n✅ Organization already exists: {org.name}")
+        else:
+            org_id = uuid.uuid4()
+            org = Organization(
+                id=org_id,
+                name="Lagos General Hospital",
+                type="hospital",
+                email=org_email,
+                phone="+2349012345678",
+                license_number="LAGOS-HIV-2024-001",
+                is_active=True,
+                is_onboarded=True,
+                disease_specializations=["hiv"],
+            )
+            db.add(org)
+            await db.flush()
+            print(f"\n✅ Created Organization: {org.name}")
         
         # -----------------------------------------------------------------
         # 2. TEAM
         # -----------------------------------------------------------------
-        team_id = uuid.uuid4()
-        team = Team(
-            id=team_id,
-            organization_id=org_id,
-            name="HIV Care Unit",
-        )
-        db.add(team)
-        await db.flush()
-        print(f"✅ Team: HIV Care Unit")
+        team_name = "HIV Care Unit"
+        # We need to query Team manually since fetch_unique usually works on ID/Email
+        # Assuming we just check if any team exists for this org with that name
+        # For simplicity, we'll try to find one attached to the org
+        # But Team model might not have a fetch_unique by name. 
+        # Using a raw query or checking relationship would be better, but let's just create if not present.
+        # However, to be truly idempotent let's fetch by org_id and name if possible or just assuming only one team
+        
+        # Simpler approach: Check if org has teams
+        # But let's look for a team with the specific name
+        from sqlalchemy import select
+        stmt = select(Team).where(Team.organization_id == org_id, Team.name == team_name)
+        result = await db.execute(stmt)
+        team = result.scalar_one_or_none()
+        
+        if team:
+            team_id = team.id
+            print(f"✅ Team already exists: {team.name}")
+        else:
+            team_id = uuid.uuid4()
+            team = Team(
+                id=team_id,
+                organization_id=org_id,
+                name=team_name,
+            )
+            db.add(team)
+            await db.flush()
+            print(f"✅ Created Team: {team.name}")
         
         # -----------------------------------------------------------------
         # 3. ADMIN USER
         # -----------------------------------------------------------------
-        admin_id = uuid.uuid4()
-        admin = User(
-            id=admin_id,
-            organization_id=org_id,
-            email="koko4lyfe@gmail.com",
-            password_hash=hash_password("SecurePass123"),
-            first_name="Dr. Koko",
-            last_name="Administrator",
-            phone="+2348000000001",
-            role=UserRole.ORG_OWNER,
-            is_active=True,
-            email_verified=True,
-            email_verified_at=datetime.now(timezone.utc),
-        )
-        db.add(admin)
-        await db.flush()
-        print(f"\n✅ ADMIN: koko4lyfe@gmail.com / SecurePass123")
+        admin_email = "koko4lyfe@gmail.com"
+        existing_admin = await User.fetch_unique(db, email=admin_email)
+        
+        if existing_admin:
+            admin = existing_admin
+            admin.organization_id = org_id # Ensure linked
+            admin.role = UserRole.ORG_OWNER # Ensure role
+            print(f"\n✅ ADMIN already exists: {admin_email}")
+        else:
+            admin_id = uuid.uuid4()
+            admin = User(
+                id=admin_id,
+                organization_id=org_id,
+                email=admin_email,
+                password_hash=hash_password("SecurePass123"),
+                first_name="Dr. Koko",
+                last_name="Administrator",
+                phone="+2348000000001",
+                role=UserRole.ORG_OWNER,
+                is_active=True,
+                email_verified=True,
+                email_verified_at=datetime.now(timezone.utc),
+            )
+            db.add(admin)
+            await db.flush()
+            print(f"\n✅ Created ADMIN: {admin_email} / SecurePass123")
         
         # -----------------------------------------------------------------
         # 4. WORKER (DOCTOR)
         # -----------------------------------------------------------------
-        worker_id = uuid.uuid4()
-        worker = User(
-            id=worker_id,
-            organization_id=org_id,
-            team_id=team_id,
-            email="winterfell856@gmail.com",
-            password_hash=hash_password("SecurePass123"),
-            first_name="Dr. Winter",
-            last_name="Fell",
-            phone="+2348000000002",
-            role=UserRole.DOCTOR,
-            is_active=True,
-            email_verified=True,
-            email_verified_at=datetime.now(timezone.utc),
-        )
-        db.add(worker)
-        await db.flush()
-        print(f"✅ WORKER: winterfell856@gmail.com / SecurePass123")
+        worker_email = "winterfell856@gmail.com"
+        existing_worker = await User.fetch_unique(db, email=worker_email)
+        
+        if existing_worker:
+            worker = existing_worker
+            worker.organization_id = org_id
+            worker.team_id = team_id
+            worker_id = worker.id
+            print(f"✅ WORKER already exists: {worker_email}")
+        else:
+            worker_id = uuid.uuid4()
+            worker = User(
+                id=worker_id,
+                organization_id=org_id,
+                team_id=team_id,
+                email=worker_email,
+                password_hash=hash_password("SecurePass123"),
+                first_name="Dr. Winter",
+                last_name="Fell",
+                phone="+2348000000002",
+                role=UserRole.DOCTOR,
+                is_active=True,
+                email_verified=True,
+                email_verified_at=datetime.now(timezone.utc),
+            )
+            db.add(worker)
+            await db.flush()
+            print(f"✅ Created WORKER: {worker_email} / SecurePass123")
         
         # -----------------------------------------------------------------
-        # 5. PATIENTS - Each designed to trigger different agent actions
+        # 5. PATIENTS
         # -----------------------------------------------------------------
         today = date.today()
         now = datetime.now(timezone.utc)
@@ -193,6 +239,22 @@ async def seed_hackathon_data():
         
         created_patients = []
         for p in patients_data:
+            # Check if patient exists
+            # We must use execute because fetch_unique might not be available or 
+            # we want to key off patient_uid + org_id
+            stmt = select(Patient).where(
+                Patient.patient_uid == p["uid"],
+                Patient.organization_id == org_id
+            )
+            res = await db.execute(stmt)
+            existing_patient = res.scalar_one_or_none()
+            
+            if existing_patient:
+                print(f"   ℹ️ Patient exists: {p['uid']}")
+                created_patients.append(existing_patient)
+                # Could update fields here if needed
+                continue
+
             patient_id = uuid.uuid4()
             
             # Calculate next refill date
@@ -263,6 +325,19 @@ async def seed_hackathon_data():
         ]
         
         for i, patient in enumerate(created_patients):
+            # Check if an automated follow-up already exists for this patient roughly at this time
+            # For hackathon/seed purposes, let's just cheat and only add if patient has NO appointments
+            stmt_appt = select(Appointment).where(
+                Appointment.patient_id == patient.id,
+                Appointment.organization_id == org_id
+            )
+            res_appt = await db.execute(stmt_appt)
+            existing_appointments = res_appt.scalars().all()
+            
+            if existing_appointments:
+                 print(f"   ℹ️ Appointments exist for {patient.first_name}")
+                 continue
+
             appt = Appointment(
                 id=uuid.uuid4(),
                 patient_id=patient.id,
@@ -274,7 +349,7 @@ async def seed_hackathon_data():
                 notes=appointment_notes[i],  # Agents can read this!
             )
             db.add(appt)
-            print(f"   {patient.first_name}: Follow-up in {i+1} day(s)")
+            print(f"   {patient.first_name}: Created Follow-up in {i+1} day(s)")
         
         await db.commit()
         
