@@ -1,4 +1,6 @@
 import json
+import uuid
+import re
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 import google.genai.types as types
@@ -18,42 +20,40 @@ class IngestionService:
             "You are an expert Medical Data Extractor. "
             "Your goal is to extract structured clinical data AND capture subtle unstructured context.\n"
             
-            "### HOW TO HANDLE UNSTRUCTURED TEXT:\n"
-            "Do not look for specific keywords. Instead, read the entire document and categorize relevant phrases into these 'Semantic Buckets':\n"
+            "### STRICT FORMATTING RULES:\n"
+            "1. **Dates**: MUST be YYYY-MM-DD. If unknown, use null.\n"
+            "2. **Gender**: MUST be one of: 'male', 'female', 'other', 'prefer_not_to_say'.\n"
+            "3. **Conditions**: MUST be one of: 'hiv', 'diabetes', 'hypertension', 'other'.\n"
+            "4. **UID**: Always return null for patient_uid.\n"
             
-            "1. **Lifestyle & Habits:** Anything related to food, movement, sleep, smoking, alcohol, or daily routine.\n"
-            "   - *Examples: 'eats mostly cassava', 'sedentary job', 'insomnia'.*\n"
-            "2. **Psychosocial Context:** Anything related to mood, home life, money, stigma, or support systems.\n"
-            "   - *Examples: 'wife doesn't know status', 'struggling with school fees', 'looks anxious'.*\n"
-            "3. **Physical Observations:** Visual clues noted by the doctor not captured in vitals.\n"
-            "   - *Examples: 'looks pale', 'rash on arms', 'wasting'.*\n"
-            
-            "If a sentence fits a bucket, extract it verbatim."
+            "### HOW TO HANDLE UNSTRUCTURED TEXT (Semantic Buckets):\n"
+            "1. **Lifestyle**: Food, movement, sleep, smoking, alcohol.\n"
+            "2. **Psychosocial**: Mood, money, stigma, family support.\n"
+            "3. **Observations**: Physical visual clues (pale, rash, wasting).\n"
         )
 
         prompt = """
-        Analyze the attached medical record. Extract:
-        1. Demographics (Name, DOB, Phone)
-        2. Clinical Profile (Regimen, VL, CD4)
-        3. **Observations**: Fill the semantic buckets defined above.
-
-        Output JSON Structure:
+        Analyze the attached medical record. Extract data into this JSON structure:
         {
-            "patient_uid": "generate-uuid",
-            "first_name": "...",
-            "last_name": "...",
-            "primary_condition": "HIV",
-            "hiv_profile": { ... },
+            "patient_uid": null,
+            "first_name": "string",
+            "last_name": "string",
+            "date_of_birth": "YYYY-MM-DD",
+            "gender": "male/female",
+            "primary_condition": "hiv",
+            "hiv_profile": { 
+                "last_viral_load_result": 1000,
+                "last_refill_date": "YYYY-MM-DD"
+            },
             "lifestyle_factors": ["string"], 
             "psychosocial_context": ["string"],
             "physical_observations": ["string"],
-            "medical_history": "parsed notes",
-            "parsing_notes": "Any text that was illegible"
+            "medical_history": "summary of past history",
+            "parsing_notes": "illegible text or warnings"
         }
         """
 
         try:
-            # Create the media part
             content_part = types.Part.from_bytes(data=file_content, mime_type=mime_type)
 
             if not self.ai.client:
@@ -64,14 +64,25 @@ class IngestionService:
                 contents=[content_part, prompt],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    system_instruction=system_instruction
+                    system_instruction=system_instruction,
+                    temperature=0.1 # Low temperature for factual extraction
                 )
             )
             
-            data = json.loads(response.text)
+            raw_text = response.text
+            if raw_text.startswith("```json"):
+                raw_text = raw_text.replace("```json", "").replace("```", "")
             
-            # --- POST-PROCESSING ---
-            # Aggregate the buckets into the medical history string so they show up in UI
+            data = json.loads(raw_text)
+            
+            if not data.get("patient_uid"):
+                data["patient_uid"] = str(uuid.uuid4())
+
+            if data.get("gender"):
+                data["gender"] = data["gender"].lower()
+            if data.get("primary_condition"):
+                data["primary_condition"] = data["primary_condition"].lower()
+
             observations = []
             if data.get("lifestyle_factors"):
                 observations.extend([f"Lifestyle: {x}" for x in data["lifestyle_factors"]])
@@ -80,23 +91,19 @@ class IngestionService:
             if data.get("physical_observations"):
                 observations.extend([f"Observation: {x}" for x in data["physical_observations"]])
             
-            current_history = data.get("medical_history", "")
-            if not current_history: 
-                current_history = ""
-            
-            # Append observations to history
+            current_history = data.get("medical_history") or ""
             if observations:
-                data["medical_history"] = current_history + "\n\n" + "\n".join(observations)
+                data["medical_history"] = current_history + "\n\n--- AI Observations ---\n" + "\n".join(observations)
 
-            # Validate Nested Models
-            if "hiv_profile" in data and data["hiv_profile"]:
-                from app.schemas.conditions import HIVProfileCreate
-                # Ensure date fields are handled (Pydantic usually handles strings -> date)
-                data["hiv_profile"] = HIVProfileCreate(**data["hiv_profile"])
+
+            if "hiv_profile" in data and not data["hiv_profile"]:
+                del data["hiv_profile"]
+            elif "hiv_profile" in data:
+                 from app.schemas.conditions import HIVProfileCreate
+                 data["hiv_profile"] = HIVProfileCreate(**data["hiv_profile"])
 
             return PatientCreate(**data)
 
         except Exception as e:
             logger.error(f"Ingestion Error: {e}")
-            # Raise exception so the API endpoint knows it failed
             raise e
