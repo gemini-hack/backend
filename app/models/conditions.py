@@ -1,13 +1,44 @@
 import uuid
 import enum
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import (
-    String, Integer, Date, DateTime, ForeignKey, Enum, Text, Boolean, Float
+    String, Integer, Date, ForeignKey, Enum, Boolean, Float
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base_model import BaseModel
+
+
+class WHOStage(str, enum.Enum):
+    STAGE_I = "Stage I"
+    STAGE_II = "Stage II"
+    STAGE_III = "Stage III"
+    STAGE_IV = "Stage IV"
+
+
+class FunctionalStatus(str, enum.Enum):
+    WORKING = "Working"
+    AMBULATORY = "Ambulatory"
+    BEDRIDDEN = "Bedridden"
+
+
+class RegimenLine(str, enum.Enum):
+    FIRST_LINE = "First Line"
+    SECOND_LINE = "Second Line"
+    THIRD_LINE = "Third Line"
+    SALVAGE = "Salvage"
+
+
+class EnrollmentSetting(str, enum.Enum):
+    OPD = "OPD"
+    TB_CLINIC = "TB Clinic"
+    WARD = "Ward"
+    VCT = "VCT"
+    OUTREACH = "Outreach"
+    PMTCT = "PMTCT"
+    OTHER = "Other"
+
 
 
 class Condition(str, enum.Enum):
@@ -23,30 +54,35 @@ class Condition(str, enum.Enum):
 
 
 class HIVProfile(BaseModel):
-    """HIV-specific clinical data."""
+    """HIV-specific clinical data (Updated for LAMIS/NMRS Compliance)."""
     __tablename__ = "hiv_profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), unique=True, index=True)
     
-    # Diagnosis & Treatment
+    # Diagnosis & Enrollment
     date_of_diagnosis: Mapped[date | None] = mapped_column(Date)
+    enrollment_setting: Mapped[EnrollmentSetting | None] = mapped_column(Enum(EnrollmentSetting))
+    
+    # Treatment
     art_start_date: Mapped[date | None] = mapped_column(Date)
-    
-    # Baseline Metrics
-    baseline_viral_load: Mapped[int | None] = mapped_column(Integer)
-    baseline_cd4_count: Mapped[int | None] = mapped_column(Integer)
-    
-    # Regimen
     initial_art_regimen: Mapped[str | None] = mapped_column(String(255))
     current_art_regimen: Mapped[str | None] = mapped_column(String(255))
+    regimen_line: Mapped[RegimenLine | None] = mapped_column(Enum(RegimenLine))
+
+    # Current Clinical Status
+    who_clinical_stage: Mapped[WHOStage | None] = mapped_column(Enum(WHOStage))
+    functional_status: Mapped[FunctionalStatus | None] = mapped_column(Enum(FunctionalStatus))
     
     # Refill Tracking
     last_refill_date: Mapped[date | None] = mapped_column(Date)
     refill_months: Mapped[int | None] = mapped_column(Integer)
     next_refill_date: Mapped[date | None] = mapped_column(Date)
-    
+
     # Viral Load History
+    baseline_viral_load: Mapped[int | None] = mapped_column(Integer)
+    baseline_cd4_count: Mapped[int | None] = mapped_column(Integer)
+    
     last_viral_load_sample_date: Mapped[date | None] = mapped_column(Date)
     last_viral_load_result_date: Mapped[date | None] = mapped_column(Date)
     last_viral_load_result: Mapped[int | None] = mapped_column(Integer)

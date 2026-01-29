@@ -52,6 +52,7 @@ class PatientCreate(PatientBase):
 
     team_id: Optional[UUID] = None
     provider_id: Optional[UUID] = None
+    status: Optional[PatientStatus] = None
 
 class PatientResponse(PatientBase):
     """Schema for patient response."""
