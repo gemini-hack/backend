@@ -76,7 +76,7 @@ class OrganizationResponse(OrganizationBase):
 # ============== User Schemas ==============
 
 class UserBase(BaseModel):
-    """Base schema for user."""l
+    """Base schema for user."""
     email: LowercaseEmail
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
