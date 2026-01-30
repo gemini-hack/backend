@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any
 from app.agents.base import BaseSupervisor, BaseWorker
 from app.agents.context import AgentContext, AgentAction
+from app.agents.thought_emitter import ThoughtEmitter
+from app.schemas.thought_stream import ThoughtStage
 from app.models.patient import Patient, PatientStatus
 from sqlalchemy import select
 from app.utils.logger import logger
@@ -26,13 +28,26 @@ class SupervisorAgent(BaseSupervisor):
         from app.services.notification_manager import NotificationManager
         self.notification_manager = NotificationManager(db_session)
 
-    async def run_cycle(self, organization_id: uuid.UUID) -> AgentContext:
+    async def run_cycle(self, organization_id: uuid.UUID, cycle_id: uuid.UUID = None) -> AgentContext:
         logger.info(f"Supervisor {self.name} starting morning rounds for organization {organization_id}")
         
-        # 1. Create Context & Fetch Patients
-        context = AgentContext(organization_id=organization_id)
+        if cycle_id:
+            context = AgentContext(organization_id=organization_id, cycle_id=cycle_id)
+        else:
+            context = AgentContext(organization_id=organization_id)
         
-        # Fetch relevant patients
+        emitter = ThoughtEmitter(context.cycle_id, organization_id)
+        context.set_emitter(emitter)
+        
+        logger.info(f"🕐 Waiting 5s for SSE clients to subscribe to cycle {context.cycle_id}...")
+        await asyncio.sleep(5)
+        
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.LOADING_DATA,
+            content=f"🏥 Beginning morning rounds for organization..."
+        )
+        
         query = select(Patient).where(
             Patient.organization_id == organization_id,
             Patient.status == PatientStatus.ACTIVE
@@ -41,7 +56,12 @@ class SupervisorAgent(BaseSupervisor):
         patients = result.scalars().all()
         context.set("patients", patients)
         
-        # 2. Run Workers with Exponential Backoff
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.LOADING_DATA,
+            content=f"📋 Loaded {len(patients)} active patients for analysis"
+        )
+        
         base_delay = 4  # Base delay in seconds
         max_retries = 3
         
@@ -49,11 +69,25 @@ class SupervisorAgent(BaseSupervisor):
             retries = 0
             delay = base_delay
             
+            await emitter.emit(
+                agent_name=self.name,
+                stage=ThoughtStage.SPECIALIST_ANALYSIS,
+                content=f"🔬 Dispatching {worker.name.replace('_', ' ').title()} specialist..."
+            )
+            
             while retries <= max_retries:
                 try:
                     logger.info(f"📊 [{worker.name.upper()}] Specialist analyzing patient data...")
                     await worker.run(context)
-                    # Sleep to respect rate limits
+                    
+                    worker_result = context.worker_results.get(worker.name)
+                    if worker_result:
+                        await emitter.emit(
+                            agent_name=worker.name,
+                            stage=ThoughtStage.SPECIALIST_ANALYSIS,
+                            content=f"✅ Analysis complete. {len(worker_result.proposed_actions)} actions proposed, {len(worker_result.flagged_patients)} patients flagged."
+                        )
+                    
                     logger.debug(f"Sleeping for {delay}s to respect Gemini Rate Limit...")
                     await asyncio.sleep(delay)
                     break  # Success, move to next worker
@@ -63,21 +97,60 @@ class SupervisorAgent(BaseSupervisor):
                         retries += 1
                         delay = base_delay * (2 ** retries)  # Exponential backoff: 8s, 16s, 32s
                         logger.warning(f"Rate limit hit for {worker.name}. Retry {retries}/{max_retries} after {delay}s backoff...")
+                        await emitter.emit(
+                            agent_name=worker.name,
+                            stage=ThoughtStage.ERROR,
+                            content=f"⏳ Rate limited. Retrying in {delay}s..."
+                        )
                         await asyncio.sleep(delay)
                     else:
                         logger.error(f"Specialist {worker.name} failed during rounds: {error_str}")
+                        await emitter.emit(
+                            agent_name=worker.name,
+                            stage=ThoughtStage.ERROR,
+                            content=f"❌ Specialist failed: {error_str[:100]}"
+                        )
                         break  # Move to next worker on non-retryable error
 
-        # 3. Synthesize Decisions (The Brain)
+        # Synthesize Decisions (The Brain)
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.SUPERVISOR_SYNTHESIS,
+            content="🧠 Synthesizing specialist reports into final action plan..."
+        )
         await self._synthesize_decisions(context)
         
-        # 4. EXECUTION PHASE (The Hands - Autonomy)
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.SUPERVISOR_SYNTHESIS,
+            content=f"📝 Synthesis complete. {len(context.final_actions)} final actions decided."
+        )
+        
+        # EXECUTION PHASE (The Hands - Autonomy)
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.AUTO_EXECUTION,
+            content="⚡ Executing automated low-risk actions..."
+        )
         await self._execute_automated_actions(context)
 
-        # 5. Quality Control
+        # Quality Control
+        await emitter.emit(
+            agent_name="quality_doctor_critic",
+            stage=ThoughtStage.CRITIC_REVIEW,
+            content="🔍 Critic reviewing all proposed actions for safety..."
+        )
         from app.agents.workers.critic import CriticWorker
         critic = CriticWorker()
         await critic.run(context)
+        
+        # Emit completion
+        await emitter.emit(
+            agent_name=self.name,
+            stage=ThoughtStage.COMPLETE,
+            content=f"✅ Morning rounds complete. {len(context.final_actions)} actions ready.",
+            metadata={"action_count": len(context.final_actions), "cycle_id": str(context.cycle_id)}
+        )
         
         return context
 
