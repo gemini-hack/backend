@@ -1,5 +1,6 @@
 import uuid
-from typing import List
+from datetime import datetime
+from typing import List, Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +9,20 @@ from app.models.patient import Patient
 from app.models.agent import AgentAction, Alert, AlertSeverity, AlertStatus
 from app.agents.supervisor import SupervisorAgent
 from app.utils.logger import logger
+
+
+def _serialize_for_json(obj: Any) -> Any:
+    """Recursively convert datetime objects to ISO strings for JSONB storage."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: _serialize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_serialize_for_json(item) for item in obj]
+    elif isinstance(obj, uuid.UUID):
+        return str(obj)
+    return obj
+
 
 class DailyAnalysisWorkflow:
     """
@@ -158,10 +173,10 @@ class DailyAnalysisWorkflow:
                 organization_id=context.organization_id,
                 action_type=action.type,
                 status=action.status,
-                content=action.content,
+                content=_serialize_for_json(action.content),
                 ai_reasoning=action.reasoning,
                 confidence_score=action.confidence,
-                decision_trace=trace  # Save the full trace!
+                decision_trace=_serialize_for_json(trace)  # Save the full trace!
             )
             self.db.add(db_action)
             
@@ -194,7 +209,7 @@ class DailyAnalysisWorkflow:
                     status=AlertStatus.PENDING,
                     title=f"AI Agent: {action.type.replace('_', ' ').title()}",
                     description=action.reasoning,
-                    ai_assessment=action.content
+                    ai_assessment=_serialize_for_json(action.content)
                 )
                 self.db.add(alert)
                 alert_count += 1
