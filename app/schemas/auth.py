@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, ValidationInfo, BeforeValidator
 import re
 
 from app.models.user import UserRole
@@ -24,13 +24,20 @@ def validate_password(password: str) -> str:
     return password
 
 
+def normalize_email(v: str | None) -> str | None:
+    """Normalize email to lowercase."""
+    return v.lower() if v else v
+
+LowercaseEmail = Annotated[EmailStr, BeforeValidator(normalize_email)]
+
+
 # ============== Organization Schemas ==============
 
 class OrganizationBase(BaseModel):
     """Base schema for organization."""
     name: str = Field(..., min_length=2, max_length=255)
     type: str = Field(..., min_length=2, max_length=50)
-    email: EmailStr
+    email: LowercaseEmail
     phone: Optional[str] = Field(None, max_length=20)
     license_number: Optional[str] = Field(None, max_length=100)
 
@@ -69,8 +76,8 @@ class OrganizationResponse(OrganizationBase):
 # ============== User Schemas ==============
 
 class UserBase(BaseModel):
-    """Base schema for user."""
-    email: EmailStr
+    """Base schema for user."""l
+    email: LowercaseEmail
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
@@ -137,7 +144,7 @@ class RegisterRequest(BaseModel):
     organization_type: str = Field(..., min_length=2, max_length=50)
     
     # Owner details
-    owner_email: EmailStr
+    owner_email: LowercaseEmail
     owner_password: str = Field(..., min_length=8, max_length=128)
     owner_first_name: str = Field(..., min_length=1, max_length=100)
     owner_last_name: str = Field(..., min_length=1, max_length=100)
@@ -184,7 +191,7 @@ class RegisterResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     """Schema for login request."""
-    email: EmailStr
+    email: LowercaseEmail
     password: str
     
     model_config = ConfigDict(
@@ -277,8 +284,8 @@ class ChangePasswordRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     """Schema for forgot password request."""
-    email: EmailStr
-    
+    email: LowercaseEmail
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -325,8 +332,8 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     """Schema for resending verification email."""
-    email: EmailStr
-    
+    email: LowercaseEmail
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -340,8 +347,9 @@ class ResendVerificationRequest(BaseModel):
 
 class InviteWorkerRequest(BaseModel):
     """Schema for inviting a worker."""
-    email: EmailStr
+    email: LowercaseEmail
     first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
     role: UserRole = Field(...)
     team_id: Optional[UUID] = None  # Optional team assignment
