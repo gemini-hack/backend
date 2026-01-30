@@ -34,7 +34,9 @@ def parse_json_column(value):
                 return json.loads(value)
             except json.JSONDecodeError:
                 pass
-        # Fall back to comma-separated
+        # Fall back to semicolon-separated, then comma-separated
+        if ";" in value:
+            return [item.strip() for item in value.split(";") if item.strip()]
         return [item.strip() for item in value.split(",") if item.strip()]
     return []
 

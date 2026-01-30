@@ -106,7 +106,7 @@ async def entrypoint(ctx: agents.JobContext):
         # Configure the RealtimeModel with VAD turn detection settings
         model = google.realtime.RealtimeModel(
             model="gemini-2.5-flash-native-audio-preview-12-2025",
-            voice="Puck",
+            voice="Kore",
             temperature=0.8,
             instructions=MIRA_INSTRUCTIONS,
             # Enable input/output audio transcription for debugging

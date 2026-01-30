@@ -109,3 +109,39 @@ async def assign_patient(
             "care_coordinator_id": str(patient.care_coordinator_id) if patient.care_coordinator_id else None,
         },
     )
+
+
+@router.post(
+    "/reassign",
+    status_code=status.HTTP_200_OK,
+    summary="Reassign patient to a different worker",
+    dependencies=[Depends(require_permission("caseload:assign"))],
+)
+async def reassign_patient(
+    patient_uid: str,
+    new_worker_id: str,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """
+    Reassign a patient from their current care team member to a new one.
+    
+    The new worker's role determines which slot (physician, nurse, coordinator) is updated.
+    This endpoint is useful for workload balancing and staff changes.
+    """
+    try:
+        worker_uuid = uuid.UUID(new_worker_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid worker ID format")
+
+    service = CaseloadService(db)
+    result = await service.reassign_patient(
+        patient_uid=patient_uid,
+        new_worker_id=worker_uuid,
+        organization_id=user.organization_id,
+    )
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message=f"Patient reassigned from {result['previous_worker'] or 'nobody'} to {result['new_worker']}",
+        data=result,
+    )
