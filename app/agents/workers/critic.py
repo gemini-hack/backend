@@ -40,7 +40,7 @@ class CriticWorker(BaseWorker):
         
         prompt = (
             "Review the following proposed actions for patients in this cycle:\n"
-            f"{json.dumps([a.model_dump() for a in proposals], indent=2)}\n\n"
+            f"{json.dumps([a.model_dump() for a in proposals], indent=2, default=str)}\n\n"
             "Return a list of reviews. Each review should include: "
             "'target_id', 'action_type', 'decision' (APPROVED/REJECTED), and 'reasoning'."
         )
