@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -47,6 +47,9 @@ class AgentActionResponse(AgentActionBase):
     scheduled_at: Optional[datetime] = None
     executed_at: Optional[datetime] = None
     created_at: datetime
+    
+    # Decision trace: Full audit trail of agent reasoning
+    decision_trace: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(from_attributes=True)
 
