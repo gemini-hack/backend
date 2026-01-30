@@ -6,10 +6,11 @@ because a similar action was recently taken for the same patient.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.agent import AgentAction, ActionOutcome
 from app.utils.logger import logger
@@ -70,14 +71,14 @@ async def get_patients_with_recent_actions(
     organization_id: uuid.UUID,
     action_types: List[str],
     cooldown_hours: int = ACTION_COOLDOWN_HOURS
-) -> set:
+) -> dict:
     """
     Get set of patient IDs that have recent unresolved actions.
     
     Useful for batch checking before processing a list of patients.
     
     Returns:
-        Set of patient UUIDs that should be skipped
+        Dict mapping patient_id -> set of action_types they have
     
     Time Complexity: O(n) where n = number of recent actions
     Space Complexity: O(k) where k = unique patients with recent actions
@@ -165,3 +166,99 @@ async def resolve_action(
     action.outcome_reason = reason
     
     logger.info(f"Action {action_id} resolved: {reason}")
+
+
+async def detect_and_resolve_outcomes(
+    db: AsyncSession,
+    organization_id: uuid.UUID
+) -> Dict[str, int]:
+    """
+    Auto-detect and resolve actions based on patient data changes.
+    
+    Checks pending/sent actions and resolves them if:
+    - Appointment reminders: appointment marked COMPLETED/ATTENDED
+    - Engagement nudges: patient.last_reading_at updated since action
+    - VL interventions: new lab result submitted since action
+    
+    Returns:
+        Dict with counts of resolved actions by type
+    
+    Time Complexity: O(n) where n = number of pending actions
+    Space Complexity: O(n) for loading actions
+    """
+    from app.models.patient import Patient
+    from app.models.appointments import Appointment, AppointmentStatus
+    
+    resolved_counts = {
+        "appointment_reminder": 0,
+        "engagement_nudge": 0,
+        "onboarding_reminder": 0,
+        "vl_intervention": 0,
+        "total": 0
+    }
+    
+    # Get all pending/sent actions for this org
+    query = select(AgentAction).options(
+        selectinload(AgentAction.patient)
+    ).where(
+        and_(
+            AgentAction.organization_id == organization_id,
+            AgentAction.outcome.in_([ActionOutcome.PENDING, ActionOutcome.SENT])
+        )
+    )
+    
+    result = await db.execute(query)
+    actions = result.scalars().all()
+    
+    for action in actions:
+        patient = action.patient
+        if not patient:
+            continue
+        
+        resolved = False
+        reason = ""
+        
+        # 1. Appointment Reminders - check if appointment is completed
+        if action.action_type == "appointment_reminder":
+            # Check if the appointment was completed
+            if action.content and "appointment_id" in action.content:
+                apt_id = action.content["appointment_id"]
+                apt_query = select(Appointment).where(Appointment.id == apt_id)
+                apt_result = await db.execute(apt_query)
+                appointment = apt_result.scalar_one_or_none()
+                
+                if appointment and appointment.status in [
+                    AppointmentStatus.COMPLETED,
+                    AppointmentStatus.ATTENDED
+                ]:
+                    resolved = True
+                    reason = f"Patient attended appointment on {appointment.scheduled_date}"
+                    resolved_counts["appointment_reminder"] += 1
+        
+        # 2. Engagement/Onboarding Nudges - check if patient submitted reading
+        elif action.action_type in ["engagement_nudge", "onboarding_reminder"]:
+            if patient.last_reading_at and patient.last_reading_at > action.created_at:
+                resolved = True
+                reason = f"Patient submitted health reading on {patient.last_reading_at.date()}"
+                resolved_counts[action.action_type] += 1
+        
+        # 3. VL Interventions - check for new lab results
+        elif action.action_type in ["unsuppressed_vl_intervention", "low_level_viremia_review"]:
+            # Check if HIV profile has newer VL result
+            if hasattr(patient, 'hiv_profile') and patient.hiv_profile:
+                profile = patient.hiv_profile
+                if profile.last_viral_load_result_date and profile.last_viral_load_result_date > action.created_at.date():
+                    resolved = True
+                    reason = f"New VL result received: {profile.last_viral_load_result} on {profile.last_viral_load_result_date}"
+                    resolved_counts["vl_intervention"] += 1
+        
+        # Mark as resolved if detected
+        if resolved:
+            action.outcome = ActionOutcome.RESOLVED
+            action.outcome_detected_at = datetime.now(timezone.utc)
+            action.outcome_reason = reason
+            resolved_counts["total"] += 1
+            logger.info(f"Auto-resolved action {action.id}: {reason}")
+    
+    return resolved_counts
+

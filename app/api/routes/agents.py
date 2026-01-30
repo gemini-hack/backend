@@ -3,7 +3,7 @@ import json
 import asyncio
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request, Query
+from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request, Query, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 
@@ -132,6 +132,67 @@ async def list_resolved_actions(
             "offset": offset,
             "limit": limit,
             "actions": [AgentActionResponse.model_validate(a).model_dump() for a in actions]
+        }
+    )
+
+
+@router.post(
+    "/actions/{action_id}/resolve",
+    status_code=http_status.HTTP_200_OK,
+    summary="Manually resolve an agent action",
+    dependencies=[Depends(require_permission("agents:write"))],
+)
+async def resolve_action_endpoint(
+    action_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+    reason: str = Query(..., min_length=5, description="Resolution reason"),
+):
+    """
+    Manually mark an agent action as resolved.
+    
+    Use this when a clinician has verified the patient action was completed
+    outside of the automated detection system.
+    
+    - **reason**: Explanation of how the action was resolved
+    """
+    from app.services.action_idempotency import resolve_action
+    from app.models.agent import ActionOutcome
+    
+    action = await db.get(AgentAction, action_id)
+    
+    if not action:
+        from app.utils.responses import fail_response
+        return fail_response(
+            status_code=404,
+            message="Action not found"
+        )
+    
+    if action.organization_id != user.organization_id:
+        from app.utils.responses import fail_response
+        return fail_response(
+            status_code=403,
+            message="Action belongs to different organization"
+        )
+    
+    if action.outcome == ActionOutcome.RESOLVED:
+        return success_response(
+            status_code=200,
+            message="Action was already resolved",
+            data={"action_id": str(action_id), "outcome_reason": action.outcome_reason}
+        )
+    
+    await resolve_action(db, action_id, f"Manually resolved by {user.email}: {reason}")
+    await db.commit()
+    
+    return success_response(
+        status_code=200,
+        message="Action resolved successfully",
+        data={
+            "action_id": str(action_id),
+            "outcome": "resolved",
+            "outcome_reason": reason,
+            "resolved_by": str(user.id)
         }
     )
 
@@ -341,3 +402,115 @@ async def update_agent_config(
     await db.refresh(organization)
     
     return organization
+
+
+# ==============================================================================
+# WebSocket Dashboard Notifications
+# ==============================================================================
+
+@router.websocket("/dashboard/ws")
+async def websocket_dashboard(
+    websocket: WebSocket,
+    token: Optional[str] = Query(default=None),
+):
+    """
+    WebSocket endpoint for real-time dashboard notifications.
+    
+    Clinicians connect and receive instant updates when:
+    - New agent actions are created
+    - New alerts are generated
+    - Actions are resolved
+    - Morning rounds start/complete
+    
+    Usage (JavaScript):
+        const ws = new WebSocket('ws://localhost:8000/api/v1/agents/dashboard/ws?token=JWT_TOKEN');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Dashboard update:', data);
+        };
+    
+    Message format:
+        {
+            "type": "new_action" | "new_alert" | "action_resolved" | "cycle_started" | "cycle_completed",
+            "timestamp": "2026-01-30T15:00:00Z",
+            "organization_id": "uuid",
+            "data": { ... }
+        }
+    """
+    # Validate JWT token
+    if not token:
+        await websocket.close(code=4001, reason="Missing token")
+        return
+    
+    try:
+        from app.core.security import decode_token
+        from app.core.config import settings
+        
+        payload = decode_token(token, settings.SECRET_KEY)
+        organization_id = UUID(payload.get("org_id"))
+        user_id = payload.get("sub")
+        
+        logger.info(f"WebSocket dashboard connection from user {user_id} for org {organization_id}")
+        
+    except Exception as e:
+        logger.warning(f"WebSocket auth failed: {e}")
+        await websocket.close(code=4003, reason="Invalid token")
+        return
+    
+    await websocket.accept()
+    
+    # Subscribe to Redis channel for this organization
+    from app.core.redis import RedisManager
+    
+    channel = f"dashboard:{organization_id}"
+    
+    try:
+        redis = RedisManager.get_client()
+        pubsub = redis.pubsub()
+        await pubsub.subscribe(channel)
+        
+        # Send connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "timestamp": datetime.now().isoformat(),
+            "channel": channel,
+            "message": "Connected to dashboard notifications"
+        })
+        
+        # Listen for messages
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            
+            if message and message["type"] == "message":
+                data = message["data"]
+                if isinstance(data, bytes):
+                    data = data.decode("utf-8")
+                await websocket.send_text(data)
+            
+            # Also check for WebSocket disconnect
+            try:
+                # Non-blocking check for client messages (like ping/pong)
+                await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=0.01
+                )
+            except asyncio.TimeoutError:
+                pass  # No message, continue
+            except WebSocketDisconnect:
+                break
+                
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket dashboard disconnected for org {organization_id}")
+    except Exception as e:
+        logger.error(f"WebSocket dashboard error: {e}")
+    finally:
+        try:
+            await pubsub.unsubscribe(channel)
+            await pubsub.close()
+        except:
+            pass
+        
+        try:
+            await websocket.close()
+        except:
+            pass

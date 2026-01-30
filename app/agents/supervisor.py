@@ -48,6 +48,17 @@ class SupervisorAgent(BaseSupervisor):
             content=f"🏥 Beginning morning rounds for organization..."
         )
         
+        # PHASE 0: Auto-detect and resolve outcomes from previous actions
+        from app.services.action_idempotency import detect_and_resolve_outcomes
+        resolved_counts = await detect_and_resolve_outcomes(self.db, organization_id)
+        
+        if resolved_counts["total"] > 0:
+            await emitter.emit(
+                agent_name=self.name,
+                stage=ThoughtStage.LOADING_DATA,
+                content=f"✅ Auto-resolved {resolved_counts['total']} actions from previous rounds (patients responded!)"
+            )
+        
         query = select(Patient).where(
             Patient.organization_id == organization_id,
             Patient.status == PatientStatus.ACTIVE

@@ -199,6 +199,25 @@ class DailyAnalysisWorkflow:
                 self.db.add(alert)
                 alert_count += 1
         
+        # Commit to get IDs
+        await self.db.commit()
+        
+        # Push real-time notifications to connected dashboards
+        try:
+            from app.services.dashboard_notifier import DashboardNotifier
+            notifier = DashboardNotifier(context.organization_id)
+            
+            # Notify cycle complete with summary
+            await notifier.notify_cycle_completed(
+                cycle_id=context.cycle_id,
+                actions_count=len(context.final_actions),
+                alerts_count=alert_count
+            )
+            logger.info(f"Dashboard notified: {len(context.final_actions)} actions, {alert_count} alerts")
+        except Exception as e:
+            # Non-blocking - don't fail the workflow if notification fails
+            logger.warning(f"Dashboard notification failed (non-blocking): {e}")
+        
         logger.info(f"Action types seen: {action_types_seen}")
         logger.info(f"Created {alert_count} alerts from {len(context.final_actions)} actions (with decision traces)")
 
