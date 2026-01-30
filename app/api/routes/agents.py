@@ -1,7 +1,10 @@
 from typing import List, Optional
+import json
+import asyncio
 from uuid import UUID
-from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks
+from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (
     CurrentUser,
@@ -13,6 +16,7 @@ from app.schemas.agent import AlertResponse, AgentActionResponse
 from app.schemas.auth import OrganizationResponse
 from app.models.user import Organization
 from app.utils.responses import success_response
+from app.utils.logger import logger
 from sqlalchemy import select, desc
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -93,15 +97,140 @@ async def trigger_analysis_rounds(
     user: CurrentUser,
     db: DbSession,
 ):
-    """Manually trigger a morning rounds analysis for the organization."""
+    """
+    Manually trigger a morning rounds analysis for the organization.
+    
+    Returns a cycle_id that can be used to subscribe to the thought stream.
+    Connect to `/agents/stream/{cycle_id}` BEFORE calling this endpoint
+    to observe the AI's thinking in real-time.
+    """
+    import uuid
     from app.workflows.daily_analysis import DailyAnalysisWorkflow
+    
+    cycle_id = uuid.uuid4()
+    
     workflow = DailyAnalysisWorkflow(db)
-    background_tasks.add_task(workflow.execute_for_org, user.organization_id)
+    background_tasks.add_task(workflow.execute_for_org, user.organization_id, cycle_id)
     
     return success_response(
         status_code=202,
-        message="Analysis rounds triggered in background",
+        message="Analysis rounds triggered in background. Subscribe to stream for real-time thoughts.",
+        data={
+            "cycle_id": str(cycle_id),
+            "stream_url": f"/api/v1/agents/stream/{cycle_id}",
+            "organization_id": str(user.organization_id),
+        }
     )
+
+
+@router.get(
+    "/stream/{cycle_id}",
+    summary="Stream agent thoughts in real-time (SSE)",
+    dependencies=[Depends(require_permission("agents:read"))],
+)
+async def stream_agent_thoughts(
+    cycle_id: UUID,
+    request: Request,
+    user: CurrentUser,
+):
+    """
+    Server-Sent Events (SSE) endpoint to stream real-time agent thoughts.
+    
+    **How to use:**
+    1. Connect to this endpoint BEFORE triggering analysis
+    2. Call POST `/agents/trigger-rounds` to start the analysis
+    3. Watch thoughts stream in real-time as each specialist analyzes patients
+    4. Stream ends when analysis is complete
+    
+    **Event Format:**
+    ```json
+    {
+        "cycle_id": "uuid",
+        "timestamp": "ISO datetime",
+        "agent_name": "hiv_specialist",
+        "stage": "specialist_analysis",
+        "content": "Analyzing viral load for patient...",
+        "patient_id": "uuid or null",
+        "metadata": {}
+    }
+    ```
+    
+    **Stages:**
+    - `loading_data`: Initial data loading
+    - `specialist_analysis`: Specialists analyzing patients
+    - `supervisor_synthesis`: Supervisor making final decisions
+    - `critic_review`: Quality control review
+    - `auto_execution`: Automated actions being executed
+    - `complete`: Analysis finished
+    """
+    from app.core.redis import RedisManager
+    
+    channel = f"thoughts:org:{user.organization_id}:cycle:{cycle_id}"
+    
+    async def event_generator():
+        try:
+            redis = RedisManager.get_client()
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(channel)
+            
+            # Send connection confirmation
+            yield f"data: {json.dumps({'event': 'connected', 'cycle_id': str(cycle_id), 'channel': channel})}\n\n"
+            
+            # Set timeout for stream (5 minutes max)
+            timeout = 300  # 5 minutes
+            start_time = asyncio.get_event_loop().time()
+            
+            async for message in pubsub.listen():
+                # Check timeout
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed > timeout:
+                    yield f"data: {json.dumps({'event': 'timeout', 'message': 'Stream timeout after 5 minutes'})}\n\n"
+                    break
+                
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    logger.info(f"Client disconnected from thought stream {cycle_id}")
+                    break
+                
+                if message["type"] == "message":
+                    data = message["data"]
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    
+                    yield f"data: {data}\n\n"
+                    
+                    # Check for completion signal
+                    try:
+                        parsed = json.loads(data)
+                        if parsed.get("stage") == "complete":
+                            yield f"data: {json.dumps({'event': 'stream_end', 'message': 'Analysis complete'})}\n\n"
+                            break
+                    except json.JSONDecodeError:
+                        pass
+                        
+        except RuntimeError as e:
+            # Redis not initialized
+            logger.warning(f"Redis not available for streaming: {e}")
+            yield f"data: {json.dumps({'event': 'error', 'message': 'Streaming not available - Redis not connected'})}\n\n"
+        except Exception as e:
+            logger.error(f"Thought stream error: {e}")
+            yield f"data: {json.dumps({'event': 'error', 'message': str(e)})}\n\n"
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+            except:
+                pass
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
+
 
 @router.patch(
     "/config",
@@ -116,6 +245,8 @@ async def update_agent_config(
     disease_specializations: List[str],
 ):
     """Update which diseases the agents should monitor for this organization."""
+    from fastapi import HTTPException
+    
     result = await db.execute(
         select(Organization).where(
             Organization.id == user.organization_id

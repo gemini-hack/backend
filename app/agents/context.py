@@ -1,7 +1,11 @@
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 import uuid
+
+if TYPE_CHECKING:
+    from app.agents.thought_emitter import ThoughtEmitter
+
 
 class AgentAction(BaseModel):
     """A proposed action from an agent."""
@@ -12,6 +16,7 @@ class AgentAction(BaseModel):
     confidence: float = 1.0
     status: str = "pending"
 
+
 class WorkerResult(BaseModel):
     """Result of a worker agent's analysis."""
     worker_name: str
@@ -20,6 +25,7 @@ class WorkerResult(BaseModel):
     proposed_actions: List[AgentAction] = Field(default_factory=list)
     data: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=datetime.now)
+
 
 class AgentContext(BaseModel):
     """The 'Whiteboard' - shared context for the multi-agent analysis cycle."""
@@ -35,6 +41,21 @@ class AgentContext(BaseModel):
     
     # Final decisions made by the Supervisor
     final_actions: List[AgentAction] = Field(default_factory=list)
+    
+    # Thought emitter for streaming (private, not serialized)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    # Internal emitter reference (set via set_emitter)
+    _emitter: Optional["ThoughtEmitter"] = None
+    
+    def set_emitter(self, emitter: "ThoughtEmitter") -> None:
+        """Attach a ThoughtEmitter for real-time streaming."""
+        object.__setattr__(self, '_emitter', emitter)
+    
+    @property
+    def emitter(self) -> Optional["ThoughtEmitter"]:
+        """Get the attached ThoughtEmitter, if any."""
+        return getattr(self, '_emitter', None)
     
     def set(self, key: str, value: Any):
         self.data[key] = value

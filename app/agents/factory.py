@@ -18,7 +18,7 @@ class AgentFactory:
         workers: List[BaseWorker] = []
         
         # 1. Always include core health workers
-        workers.append(DisengagementWorker())
+        workers.append(DisengagementWorker(db))
         
         # 2. Always include appointment follow-up specialist (not disease-specific)
         workers.append(FollowUpSpecialist(db))

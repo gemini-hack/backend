@@ -16,6 +16,7 @@ from app.agents.context import AgentContext, WorkerResult, AgentAction
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.patient import Patient, CommunicationPreference
 from app.models.reminder import AppointmentReminder, ReminderChannel, ReminderStatus
+from app.schemas.thought_stream import ThoughtStage
 from app.utils.logger import logger
 
 
@@ -49,12 +50,20 @@ class FollowUpSpecialist(BaseWorker):
         logger.info(f"Worker {self.name} starting analysis for org {context.organization_id}")
         
         result = WorkerResult(worker_name=self.name)
+        emitter = context.emitter
         
         # Query upcoming appointments in next 72 hours
         upcoming_appointments = await self._get_upcoming_appointments(
             context.organization_id,
             hours_ahead=72
         )
+        
+        if emitter:
+            await emitter.emit(
+                agent_name=self.name,
+                stage=ThoughtStage.SPECIALIST_ANALYSIS,
+                content=f"📅 Found {len(upcoming_appointments)} upcoming appointments in next 72 hours..."
+            )
         
         if not upcoming_appointments:
             result.findings.append("No upcoming appointments in next 72 hours")
@@ -70,6 +79,7 @@ class FollowUpSpecialist(BaseWorker):
                 continue
             
             patient = appointment.patient
+            patient_name = f"{patient.first_name} {patient.last_name}" if patient.first_name else str(patient.id)[:8]
             
             # Check no-show history
             no_show_count = await self._get_no_show_count(patient.id)
@@ -80,6 +90,15 @@ class FollowUpSpecialist(BaseWorker):
                 appointment=appointment,
                 no_show_count=no_show_count
             )
+            
+            if emitter:
+                priority_emoji = "🚨" if strategy["priority"] == "high" else "📋"
+                await emitter.emit(
+                    agent_name=self.name,
+                    stage=ThoughtStage.SPECIALIST_ANALYSIS,
+                    content=f"{priority_emoji} {patient_name}: Appt in {strategy['hours_until']:.0f}h. Strategy: {', '.join(c.value for c in strategy['channels'])}. {strategy['reasoning']}",
+                    patient_id=patient.id
+                )
             
             # Build decision trace for observability
             decision_trace = {
@@ -112,6 +131,13 @@ class FollowUpSpecialist(BaseWorker):
             # Flag high-risk patients
             if no_show_count >= 2 or strategy["priority"] == "high":
                 result.flagged_patients.append(patient.id)
+        
+        if emitter:
+            await emitter.emit(
+                agent_name=self.name,
+                stage=ThoughtStage.SPECIALIST_ANALYSIS,
+                content=f"📬 Follow-up analysis complete: {len(result.proposed_actions)} reminders scheduled."
+            )
         
         context.add_worker_result(result)
         logger.info(f"FollowUpSpecialist proposed {len(result.proposed_actions)} reminder actions")
