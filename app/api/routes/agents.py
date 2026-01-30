@@ -2,7 +2,8 @@ from typing import List, Optional
 import json
 import asyncio
 from uuid import UUID
-from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request
+from datetime import datetime
+from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 
@@ -11,13 +12,13 @@ from app.api.dependencies import (
     DbSession,
     require_permission,
 )
-from app.models.agent import Alert, AgentAction, AlertStatus
+from app.models.agent import Alert, AgentAction, AlertStatus, ActionOutcome
 from app.schemas.agent import AlertResponse, AgentActionResponse
 from app.schemas.auth import OrganizationResponse
 from app.models.user import Organization
 from app.utils.responses import success_response
 from app.utils.logger import logger
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -61,6 +62,80 @@ async def list_agent_actions(
     actions = result.scalars().all()
     
     return actions
+
+
+@router.get(
+    "/actions/resolved",
+    status_code=http_status.HTTP_200_OK,
+    summary="List resolved agent actions",
+    dependencies=[Depends(require_permission("agents:read"))],
+)
+async def list_resolved_actions(
+    user: CurrentUser,
+    db: DbSession,
+    limit: int = Query(default=100, le=500, description="Max results to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    action_type: Optional[str] = Query(default=None, description="Filter by action type"),
+    from_date: Optional[datetime] = Query(default=None, description="Filter from date (inclusive)"),
+    to_date: Optional[datetime] = Query(default=None, description="Filter to date (inclusive)"),
+):
+    """
+    List all resolved agent actions for the organization.
+    
+    Resolved actions are cases where the patient took the desired action
+    (e.g., attended appointment, submitted health reading, responded to outreach).
+    
+    - **action_type**: Filter by specific action type (e.g., "appointment_reminder", "engagement_nudge")
+    - **from_date**: Start date for filtering
+    - **to_date**: End date for filtering
+
+    """
+    query = select(AgentAction).where(
+        AgentAction.organization_id == user.organization_id,
+        AgentAction.outcome == ActionOutcome.RESOLVED
+    )
+    
+    if action_type:
+        query = query.where(AgentAction.action_type == action_type)
+    
+    if from_date:
+        query = query.where(AgentAction.outcome_detected_at >= from_date)
+    
+    if to_date:
+        query = query.where(AgentAction.outcome_detected_at <= to_date)
+    
+    query = query.order_by(desc(AgentAction.outcome_detected_at)).offset(offset).limit(limit)
+    
+    result = await db.execute(query)
+    actions = result.scalars().all()
+    
+    # Get total count for pagination
+    count_query = select(func.count(AgentAction.id)).where(
+        AgentAction.organization_id == user.organization_id,
+        AgentAction.outcome == ActionOutcome.RESOLVED
+    )
+    if action_type:
+        count_query = count_query.where(AgentAction.action_type == action_type)
+    if from_date:
+        count_query = count_query.where(AgentAction.outcome_detected_at >= from_date)
+    if to_date:
+        count_query = count_query.where(AgentAction.outcome_detected_at <= to_date)
+    
+    total_result = await db.execute(count_query)
+    total_count = total_result.scalar()
+    
+    return success_response(
+        status_code=200,
+        message=f"Found {len(actions)} resolved actions",
+        data={
+            "total": total_count,
+            "offset": offset,
+            "limit": limit,
+            "actions": [AgentActionResponse.model_validate(a).model_dump() for a in actions]
+        }
+    )
+
+
 
 @router.get(
     "/alerts",
