@@ -217,6 +217,89 @@ class CaseloadService:
         logger.info(f"Assigned patient {patient_uid} to {worker.full_name} as {role_display}")
         return patient
 
+    async def reassign_patient(
+        self,
+        patient_uid: str,
+        new_worker_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> dict:
+        """
+        Reassign a patient from their current worker to a new worker.
+        
+        The new worker's role determines which care team slot is updated.
+        Returns info about the reassignment for audit purposes.
+        """
+        # Fetch patient
+        patient = await Patient.fetch_unique(
+            self.db,
+            patient_uid=patient_uid,
+            organization_id=organization_id,
+        )
+        if not patient:
+            raise NotFoundException("Patient not found")
+
+        # Fetch and verify new worker exists and belongs to org
+        new_worker = await User.fetch_unique(
+            self.db,
+            id=new_worker_id,
+            organization_id=organization_id,
+        )
+        if not new_worker:
+            raise NotFoundException("New worker not found or not in your organization")
+
+        # Determine which field to reassign based on new worker's role
+        role_field_map = {
+            UserRole.DOCTOR: "primary_physician_id",
+            UserRole.ORG_ADMIN: "primary_physician_id",
+            UserRole.ORG_OWNER: "primary_physician_id",
+            UserRole.NURSE: "assigned_nurse_id",
+            UserRole.COORDINATOR: "care_coordinator_id",
+        }
+        
+        role_name_map = {
+            "primary_physician_id": "physician",
+            "assigned_nurse_id": "nurse", 
+            "care_coordinator_id": "coordinator",
+        }
+        
+        field_name = role_field_map.get(new_worker.role)
+        if not field_name:
+            raise BadRequestException(f"Workers with role '{new_worker.role.value}' cannot be assigned to patients")
+        
+        role_display = role_name_map[field_name]
+        
+        # Get current assignee info for audit
+        current_assignee_id = getattr(patient, field_name)
+        previous_worker_name = None
+        
+        if current_assignee_id:
+            if current_assignee_id == new_worker_id:
+                raise BadRequestException(f"This patient is already assigned to {new_worker.full_name} as {role_display}")
+            
+            current_worker = await User.fetch_unique(
+                self.db,
+                id=current_assignee_id,
+                organization_id=organization_id,
+            )
+            previous_worker_name = current_worker.full_name if current_worker else "Unknown"
+        
+        # Perform reassignment
+        setattr(patient, field_name, new_worker_id)
+        await patient.save(self.db)
+
+        logger.info(
+            f"Reassigned patient {patient_uid} {role_display}: "
+            f"{previous_worker_name or 'None'} -> {new_worker.full_name}"
+        )
+        
+        return {
+            "patient_uid": patient.patient_uid,
+            "role": role_display,
+            "previous_worker": previous_worker_name,
+            "new_worker": new_worker.full_name,
+            "new_worker_id": str(new_worker_id),
+        }
+
     def _calculate_priority_sync(self, patient: Patient) -> int:
         """Calculate priority score (0-100) using eagerly loaded relationships."""
         score = 0
