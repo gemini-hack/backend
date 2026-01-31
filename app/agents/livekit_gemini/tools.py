@@ -48,7 +48,7 @@ Primary Condition: {patient['primary_condition']}
 Phone: {patient['phone'] or 'Not on file'}
 Last Updated: {patient['updated_at'] or 'Unknown'}"""
     
-    # Fall back to database using QueryBuilder
+    patient = None
     try:
         async with async_session_factory() as db:
             search_term = f"%{patient_name}%"
@@ -211,15 +211,15 @@ async def get_today_appointments() -> str:
         today = datetime.now().date()
         tomorrow = today + timedelta(days=1)
         
-        result = await db.execute(
-            select(Appointment)
-            .where(
+        appointments = await (
+            Appointment.query(db)
+            .filter(
                 Appointment.scheduled_time >= today,
                 Appointment.scheduled_time < tomorrow,
             )
-            .options(select.selectinload(Appointment.patient)) # Eager load patient
+            .with_relations("patient")
+            .all()
         )
-        appointments = result.scalars().all()
         
         if not appointments:
             return "No appointments scheduled for today."
@@ -251,34 +251,35 @@ async def get_patient_appointments(patient_name: str) -> str:
     patient_name = sanitize_query_input(patient_name)
     
     async with async_session_factory() as db:
-        # First find the patient
+        # First find the patient using QueryBuilder
         search_term = f"%{patient_name}%"
-        result = await db.execute(
-            select(Patient).filter(
+        patient = await (
+            Patient.query(db)
+            .filter(
                 or_(
                     Patient.first_name.ilike(search_term),
                     Patient.last_name.ilike(search_term),
                     func.concat(Patient.first_name, ' ', Patient.last_name).ilike(search_term),
                 )
             )
+            .first()
         )
-        patient = result.scalars().first()
         
         if not patient:
             return f"No patient found with name '{patient_name}'"
         
-        # Get their upcoming appointments
+        # Get their upcoming appointments using QueryBuilder
         now = datetime.now()
-        result = await db.execute(
-            select(Appointment)
+        appointments = await (
+            Appointment.query(db)
             .filter(
                 Appointment.patient_id == patient.id,
                 Appointment.scheduled_time >= now,
             )
             .order_by(Appointment.scheduled_time)
             .limit(10)
+            .all()
         )
-        appointments = result.scalars().all()
         
         if not appointments:
             return f"No upcoming appointments for {patient.first_name} {patient.last_name}"
