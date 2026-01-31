@@ -10,6 +10,7 @@ from app.utils.logger import logger
 
 from .security import validate_input, sanitize_query_input, audit_log
 from .session_cache import get_session_cache
+from .action_logger import log_call_action
 from app.services.availability_service import AvailabilityService
 from app.services.appointment_service import AppointmentService
 from app.models.appointment import AppointmentStatus
@@ -75,6 +76,13 @@ Last Updated: {patient.updated_at.strftime('%Y-%m-%d') if patient.updated_at els
     except Exception as e:
         logger.exception(f"[TOOL ERROR] get_patient_info failed: {e}")
         return f"Error looking up patient: {str(e)}"
+    finally:
+        # Log the lookup action
+        await log_call_action(
+            action_type="lookup_patient",
+            action_data={"query": patient_name},
+            result="success" if patient else "not_found"
+        )
 
 
 @function_tool
@@ -490,10 +498,35 @@ async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
                 organization_id=patient.organization_id
             )
             
+            # Log the reschedule action
+            await log_call_action(
+                action_type="reschedule_appointment",
+                action_data={
+                    "patient_id": patient_id,
+                    "patient_name": f"{patient.first_name} {patient.last_name}",
+                    "old_time": last_appointment.scheduled_time.isoformat(),
+                    "new_time": new_time.isoformat(),
+                    "appointment_id": str(last_appointment.id)
+                },
+                result="success"
+            )
+            
             return f"Successfully rescheduled appointment to {new_time.strftime('%A, %b %d at %I:%M %p')}."
             
         except Exception as e:
             logger.error(f"Reschedule failed: {e}")
+            
+            # Log the failed action
+            await log_call_action(
+                action_type="reschedule_appointment",
+                action_data={
+                    "patient_id": patient_id,
+                    "new_time": new_time.isoformat(),
+                    "error": str(e)
+                },
+                result="failed"
+            )
+            
             return f"Failed to reschedule: {str(e)}"
 
 
