@@ -21,6 +21,18 @@ from app.utils.logger import logger
 from app.utils.normalization import normalize_regimen_string
 
 
+def get_row_value(row, keys, default=None):
+    """Get value from row using multiple possible keys."""
+    if isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        if key in row:
+            val = row.get(key)
+            if not pd.isna(val) and val is not None and val != "":
+                return val
+    return default
+
+
 def parse_json_column(value):
     """Parse a JSON array from CSV cell, handling various formats."""
     if pd.isna(value) or value == "" or value is None:
@@ -41,11 +53,14 @@ def parse_json_column(value):
     return []
 
 
-def safe_str(value, default=None):
-    """Safely convert to string, handling NaN/None."""
+def safe_str(value, default=None, lower=False):
+    """Safely convert to string, handling NaN/None and optional lowercasing."""
     if pd.isna(value) or value is None:
         return default
-    return str(value).strip() if value else default
+    val = str(value).strip() if value else default
+    if val and lower:
+        return val.lower()
+    return val
 
 
 def safe_int(value):
