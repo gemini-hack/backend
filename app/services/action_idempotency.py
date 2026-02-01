@@ -37,8 +37,7 @@ async def has_recent_pending_action(
         action_type: Type of action (e.g., "engagement_nudge", "unsuppressed_vl_intervention")
         cooldown_hours: Hours to look back (default 48)
     
-    Time Complexity: O(1) - single DB query with indexes
-    Space Complexity: O(1) - returns boolean
+ 
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=cooldown_hours)
     
@@ -183,8 +182,7 @@ async def detect_and_resolve_outcomes(
     Returns:
         Dict with counts of resolved actions by type
     
-    Time Complexity: O(n) where n = number of pending actions
-    Space Complexity: O(n) for loading actions
+
     """
     from app.models.patient import Patient
     from app.models.appointments import Appointment, AppointmentStatus
