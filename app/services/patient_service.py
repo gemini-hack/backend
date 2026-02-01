@@ -161,6 +161,9 @@ class PatientService(BaseService):
             phone=data.phone,
             email=data.email,
             address=data.address,
+            emergency_contact_name=data.emergency_contact_name,
+            emergency_contact_phone=data.emergency_contact_phone,
+            emergency_contact_relationship=data.emergency_contact_relationship,
             primary_condition=data.primary_condition,
             secondary_conditions=data.secondary_conditions,
             medical_history=data.medical_history,
@@ -171,10 +174,11 @@ class PatientService(BaseService):
             care_coordinator_id=data.care_coordinator_id,
             monitoring_frequency=data.monitoring_frequency,
             preferred_contact_method=data.preferred_contact_method,
+            preferred_contact_time=data.preferred_contact_time,
+            timezone=data.timezone,
             preferred_language=data.preferred_language,
             status=data.status if data.status else PatientStatus.ACTIVE,
             team_id=data.team_id,
-            provider_id=data.provider_id,
         )
 
         
