@@ -33,15 +33,19 @@ class Organization(BaseModel):
     email: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(20))
     license_number: Mapped[str | None] = mapped_column(String(100))
+    address: Mapped[str | None] = mapped_column(Text)
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     
     # Specializations (e.g., ["hiv", "hypertension"])
     disease_specializations: Mapped[list] = mapped_column(JSONB, default=list)
     
     phone_settings: Mapped[dict | None] = mapped_column(JSONB)
     agent_settings: Mapped[dict | None] = mapped_column(JSONB)
+    
+    timezone: Mapped[str | None] = mapped_column(String(50), default="UTC")
     
     # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")

@@ -1,4 +1,6 @@
 import asyncio
+import json
+from uuid import UUID
 
 from google.genai import types
 from livekit import agents
@@ -6,11 +8,15 @@ from livekit.agents import cli
 from livekit.plugins import google, silero
 
 from app.utils.logger import logger
-
 from app.core.config import settings
+from app.db.database import async_session_factory
+from app.models import Patient
+from app.models.user import UserRole
 from .tools import MIRA_TOOLS
 from .voice_context import VoiceAgentUserContext, set_current_voice_context, clear_voice_context
 from .session_cache import preload_session_data, set_session_cache, clear_session_cache
+from .transcript_buffer import get_buffer, clear_buffer_reference
+from .action_logger import set_current_room, clear_current_room
 
 # MIRA System Instructions
 MIRA_INSTRUCTIONS = """You are MIRA, an autonomous AI care coordinator for HIV care teams. 
@@ -44,10 +50,6 @@ async def _extract_voice_context(ctx: agents.JobContext) -> VoiceAgentUserContex
     The voice session endpoint should encode user info in the room metadata
     when creating the session.
     """
-    import json
-    from uuid import UUID
-    from app.models.user import UserRole
-    
     try:
         # Try to get metadata from the room
         room_metadata = ctx.room.metadata
@@ -131,6 +133,25 @@ async def entrypoint(ctx: agents.JobContext):
         # Start the session. This publishes the agent's audio/video tracks.
         await session.start(mira_agent, room=ctx.room)
         logger.info("AgentSession started with VAD turn detection.")
+        
+        # --- TRANSCRIPT AND ACTION LOGGING SETUP ---
+        room_name = ctx.room.name
+        transcript_buffer = get_buffer(room_name)
+        set_current_room(room_name)
+        logger.info(f"Transcript buffer initialized for room: {room_name}")
+        
+        # Hook into transcript events from Gemini
+        @session.on("user_speech_committed")
+        async def on_user_speech(event):
+            """Capture user (patient) speech transcripts."""
+            transcript = getattr(event, 'transcript', None) or str(event)
+            await transcript_buffer.add_entry("user", transcript)
+        
+        @session.on("agent_speech_committed")
+        async def on_agent_speech(event):
+            """Capture agent (MIRA) speech transcripts."""
+            transcript = getattr(event, 'transcript', None) or str(event)
+            await transcript_buffer.add_entry("agent", transcript)
 
         # Force speech to confirm audio track is published and working
         logger.info("Forcing initial greeting...")
@@ -143,7 +164,10 @@ async def entrypoint(ctx: agents.JobContext):
 
         @ctx.room.on("disconnected")
         def on_disconnected(*args):
-             logger.info("Room disconnected")
+             logger.info("Room disconnected - triggering post-call processing")
+             # Clean up action logger context
+             clear_current_room()
+             clear_buffer_reference(room_name)
              if not shutdown_future.done():
                  shutdown_future.set_result(None)
         
@@ -167,9 +191,6 @@ async def entrypoint(ctx: agents.JobContext):
                     
                     if phone_number:
                         # Lookup patient by phone in database
-                        from app.db.database import async_session_factory
-                        from app.models import Patient
-                        
                         async with async_session_factory() as db:
                             patient = await Patient.query(db).filter(
                                 Patient.phone == phone_number

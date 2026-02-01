@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.db.database import async_session_factory
 from app.models import CallSession, CallStatus
+from app.tasks.call_processing import process_call_end
 from app.utils.logger import logger
 from app.core.config import settings
 
@@ -116,6 +117,10 @@ async def livekit_webhook(request: Request):
         elif event_type == "room_finished":
             # Room closed - call definitely ended
             await update_call_status(room_name, CallStatus.COMPLETED)
+
+            # Trigger post-call processing (transcript + summary persistence)
+            process_call_end.delay(room_name)
+            logger.info(f"Queued post-call processing for room: {room_name}")
         
         return {"status": "ok", "processed": True}
         

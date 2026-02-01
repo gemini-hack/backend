@@ -10,6 +10,7 @@ from app.utils.logger import logger
 
 from .security import validate_input, sanitize_query_input, audit_log
 from .session_cache import get_session_cache
+from .action_logger import log_call_action
 from app.services.availability_service import AvailabilityService
 from app.services.appointment_service import AppointmentService
 from app.models.appointment import AppointmentStatus
@@ -47,7 +48,7 @@ Primary Condition: {patient['primary_condition']}
 Phone: {patient['phone'] or 'Not on file'}
 Last Updated: {patient['updated_at'] or 'Unknown'}"""
     
-    # Fall back to database using QueryBuilder
+    patient = None
     try:
         async with async_session_factory() as db:
             search_term = f"%{patient_name}%"
@@ -75,6 +76,13 @@ Last Updated: {patient.updated_at.strftime('%Y-%m-%d') if patient.updated_at els
     except Exception as e:
         logger.exception(f"[TOOL ERROR] get_patient_info failed: {e}")
         return f"Error looking up patient: {str(e)}"
+    finally:
+        # Log the lookup action
+        await log_call_action(
+            action_type="lookup_patient",
+            action_data={"query": patient_name},
+            result="success" if patient else "not_found"
+        )
 
 
 @function_tool
@@ -203,15 +211,15 @@ async def get_today_appointments() -> str:
         today = datetime.now().date()
         tomorrow = today + timedelta(days=1)
         
-        result = await db.execute(
-            select(Appointment)
-            .where(
+        appointments = await (
+            Appointment.query(db)
+            .filter(
                 Appointment.scheduled_time >= today,
                 Appointment.scheduled_time < tomorrow,
             )
-            .options(select.selectinload(Appointment.patient)) # Eager load patient
+            .with_relations("patient")
+            .all()
         )
-        appointments = result.scalars().all()
         
         if not appointments:
             return "No appointments scheduled for today."
@@ -243,34 +251,35 @@ async def get_patient_appointments(patient_name: str) -> str:
     patient_name = sanitize_query_input(patient_name)
     
     async with async_session_factory() as db:
-        # First find the patient
+        # First find the patient using QueryBuilder
         search_term = f"%{patient_name}%"
-        result = await db.execute(
-            select(Patient).filter(
+        patient = await (
+            Patient.query(db)
+            .filter(
                 or_(
                     Patient.first_name.ilike(search_term),
                     Patient.last_name.ilike(search_term),
                     func.concat(Patient.first_name, ' ', Patient.last_name).ilike(search_term),
                 )
             )
+            .first()
         )
-        patient = result.scalars().first()
         
         if not patient:
             return f"No patient found with name '{patient_name}'"
         
-        # Get their upcoming appointments
+        # Get their upcoming appointments using QueryBuilder
         now = datetime.now()
-        result = await db.execute(
-            select(Appointment)
+        appointments = await (
+            Appointment.query(db)
             .filter(
                 Appointment.patient_id == patient.id,
                 Appointment.scheduled_time >= now,
             )
             .order_by(Appointment.scheduled_time)
             .limit(10)
+            .all()
         )
-        appointments = result.scalars().all()
         
         if not appointments:
             return f"No upcoming appointments for {patient.first_name} {patient.last_name}"
@@ -490,10 +499,35 @@ async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
                 organization_id=patient.organization_id
             )
             
+            # Log the reschedule action
+            await log_call_action(
+                action_type="reschedule_appointment",
+                action_data={
+                    "patient_id": patient_id,
+                    "patient_name": f"{patient.first_name} {patient.last_name}",
+                    "old_time": last_appointment.scheduled_time.isoformat(),
+                    "new_time": new_time.isoformat(),
+                    "appointment_id": str(last_appointment.id)
+                },
+                result="success"
+            )
+            
             return f"Successfully rescheduled appointment to {new_time.strftime('%A, %b %d at %I:%M %p')}."
             
         except Exception as e:
             logger.error(f"Reschedule failed: {e}")
+            
+            # Log the failed action
+            await log_call_action(
+                action_type="reschedule_appointment",
+                action_data={
+                    "patient_id": patient_id,
+                    "new_time": new_time.isoformat(),
+                    "error": str(e)
+                },
+                result="failed"
+            )
+            
             return f"Failed to reschedule: {str(e)}"
 
 

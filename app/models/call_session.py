@@ -1,7 +1,7 @@
 import uuid
 import enum
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import String, Text, Integer, ForeignKey, Enum as SAEnum, Index, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
@@ -86,6 +86,11 @@ class CallSession(BaseModel):
     patient = relationship("Patient")
     organization = relationship("Organization")
     triggered_by = relationship("User")
+    actions: Mapped[List["CallAction"]] = relationship(
+        "CallAction", 
+        back_populates="call_session", 
+        cascade="all, delete-orphan"
+    )
     
     __table_args__ = (
         Index("idx_call_sessions_status", "status"),
@@ -93,3 +98,33 @@ class CallSession(BaseModel):
         Index("idx_call_sessions_started_at", "started_at"),
     )
 
+
+class CallAction(BaseModel):
+    """
+    Tracks agent actions during a call.
+    
+    Records tool invocations made by MIRA during voice calls for auditability.
+    """
+    __tablename__ = "call_actions"
+    
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    
+    # Link to parent call session
+    call_session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("call_sessions.id", ondelete="CASCADE"),
+        index=True
+    )
+    
+    # Action details
+    action_type: Mapped[str] = mapped_column(String(50))  # "reschedule", "lookup_patient", etc.
+    action_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    result: Mapped[str | None] = mapped_column(String(20))  # "success", "failed", "pending"
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Relationship
+    call_session: Mapped["CallSession"] = relationship("CallSession", back_populates="actions")
+    
+    __table_args__ = (
+        Index("idx_call_actions_session", "call_session_id"),
+        Index("idx_call_actions_type", "action_type"),
+    )

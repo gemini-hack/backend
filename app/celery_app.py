@@ -73,6 +73,7 @@ celery_app.conf.update(
         'app.tasks.email.*': {'queue': 'celery'},
         'app.tasks.analysis.*': {'queue': 'high_priority'},
         'app.tasks.reminders.*': {'queue': 'celery'},
+        'app.tasks.call_processing.*': {'queue': 'celery'},
     },
     
     # Explicitly include the task modules
@@ -80,6 +81,7 @@ celery_app.conf.update(
         "app.tasks.email",
         "app.tasks.analysis",
         "app.tasks.reminders",
+        "app.tasks.call_processing",
     ]
 )
 
