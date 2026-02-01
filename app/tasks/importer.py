@@ -146,7 +146,22 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
 
             for idx, row in df.iterrows():
                 try:
-                    primary_condition = safe_str(row.get("primary_condition"), "other")
+                    # Flexible column mapping for UID and Condition
+                    patient_uid = get_row_value(row, ["patient_uid", "uid"])
+                    primary_condition = safe_str(get_row_value(row, ["primary_condition", "condition"]), default=None, lower=True)
+
+                    # Smart fallback for primary condition based on UID prefix
+                    if not primary_condition and patient_uid:
+                        uid_upper = patient_uid.upper()
+                        if "HIV" in uid_upper:
+                            primary_condition = "hiv"
+                        elif "HYP" in uid_upper:
+                            primary_condition = "hypertension"
+                        elif "DIA" in uid_upper or "DB" in uid_upper:
+                            primary_condition = "diabetes"
+                    
+                    if not primary_condition:
+                        primary_condition = "other"
 
                     # Build condition-specific profile data
                     hiv_profile = None
@@ -155,7 +170,7 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
 
                     if primary_condition == "hiv":
                         # AI Normalization for Regimen
-                        raw_regimen = safe_str(row.get("current_art_regimen"))
+                        raw_regimen = safe_str(get_row_value(row, ["current_art_regimen", "regimen"]))
                         normalized_regimen = None
                         
                         if raw_regimen:
@@ -167,13 +182,13 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                                 normalized_regimen = raw_regimen
 
                         hiv_profile = HIVProfileCreate(
-                            date_of_diagnosis=safe_str(row.get("date_of_diagnosis")),
-                            art_start_date=safe_str(row.get("art_start_date")),
-                            baseline_viral_load=safe_int(row.get("baseline_viral_load")),
-                            baseline_cd4_count=safe_int(row.get("baseline_cd4_count")),
-                            current_art_regimen=normalized_regimen or raw_regimen, # Fallback to raw if normalized is None (though normalizer handles it)
-                            last_refill_date=safe_str(row.get("last_refill_date")),
-                            refill_months=safe_int(row.get("refill_months")),
+                            date_of_diagnosis=safe_str(get_row_value(row, ["date_of_diagnosis", "diagnosis_date"])),
+                            art_start_date=safe_str(get_row_value(row, ["art_start_date"])),
+                            baseline_viral_load=safe_int(get_row_value(row, ["baseline_viral_load", "vl"])),
+                            baseline_cd4_count=safe_int(get_row_value(row, ["baseline_cd4_count", "cd4"])),
+                            current_art_regimen=normalized_regimen or raw_regimen,
+                            last_refill_date=safe_str(get_row_value(row, ["last_refill_date", "refill_date"])),
+                            refill_months=safe_int(get_row_value(row, ["refill_months"])),
                         )
                     elif primary_condition == "hypertension":
                         hypertension_profile = HypertensionProfileCreate(
@@ -195,13 +210,13 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                         )
 
                     patient_data = PatientCreate(
-                        patient_uid=safe_str(row.get("patient_uid")) or str(uuid.uuid4()),
+                        patient_uid=patient_uid or str(uuid.uuid4()),
                         first_name=safe_str(row.get("first_name")),
                         last_name=safe_str(row.get("last_name")),
                         email=safe_str(row.get("email")),
                         phone=safe_str(row.get("phone")),
-                        date_of_birth=safe_str(row.get("date_of_birth")),
-                        gender=safe_str(row.get("gender")),
+                        date_of_birth=safe_str(get_row_value(row, ["date_of_birth", "dob", "birth_date"])),
+                        gender=safe_str(row.get("gender"), lower=True),
                         primary_condition=primary_condition,
                         address=safe_str(row.get("address")),
                         emergency_contact_name=safe_str(row.get("emergency_contact_name")),
@@ -211,8 +226,8 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                         secondary_conditions=parse_json_column(row.get("secondary_conditions")),
                         current_medications=parse_json_column(row.get("current_medications")),
                         allergies=parse_json_column(row.get("allergies")),
-                        # Contact preferences
-                        preferred_contact_method=safe_str(row.get("preferred_contact_method"), "sms"),
+                        # Contact preferences - Normalize to lower case for Enum mapping
+                        preferred_contact_method=safe_str(row.get("preferred_contact_method"), "sms", lower=True),
                         preferred_contact_time=safe_str(row.get("preferred_contact_time")),
                         timezone=safe_str(row.get("timezone"), "UTC"),
                         preferred_language=safe_str(row.get("preferred_language"), "en"),
@@ -221,8 +236,8 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                         hiv_profile=hiv_profile,
                         hypertension_profile=hypertension_profile,
                         diabetes_profile=diabetes_profile,
-                        # Defaults
-                        status=safe_str(row.get("status"), "active"),
+                        # Defaults - Normalize to lower case for Enum mapping
+                        status=safe_str(row.get("status"), "active", lower=True),
                     )
 
                     await patient_service.create_patient(
@@ -244,7 +259,7 @@ def process_patient_batch_import(file_key: str, organization_id: str, user_id: s
                         skipped_count += 1
                     else:
                         logger.error(
-                            f"Failed to import row {idx + 1} (UID: {row.get('patient_uid')}): {e}"
+                            f"Failed to import row {idx + 1} (UID: {patient_uid}): {e}"
                         )
                         failure_count += 1
 
