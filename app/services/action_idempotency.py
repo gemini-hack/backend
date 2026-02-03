@@ -185,7 +185,7 @@ async def detect_and_resolve_outcomes(
 
     """
     from app.models.patient import Patient
-    from app.models.appointments import Appointment, AppointmentStatus
+    from app.models.appointment import Appointment, AppointmentStatus
     
     resolved_counts = {
         "appointment_reminder": 0,
