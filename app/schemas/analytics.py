@@ -27,3 +27,12 @@ class AdminDashboardResponse(BaseModel):
     patients: PatientStats
     alerts: AlertStats
     agents: AgentStats
+
+
+class WorkerDashboardStats(BaseModel):
+    """Stats for worker dashboard derived from agent actions."""
+    total_patients: int          
+    needs_attention: int        
+    pending_actions: int         
+    resolved_today: int           
+    generated_at: datetime

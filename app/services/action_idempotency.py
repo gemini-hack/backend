@@ -197,7 +197,7 @@ async def detect_and_resolve_outcomes(
     
     # Get all pending/sent actions for this org
     query = select(AgentAction).options(
-        selectinload(AgentAction.patient)
+        selectinload(AgentAction.patient).selectinload(Patient.hiv_profile)
     ).where(
         and_(
             AgentAction.organization_id == organization_id,

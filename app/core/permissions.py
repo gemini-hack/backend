@@ -38,6 +38,8 @@ PERM_SETTINGS_READ = "settings:read"
 PERM_SETTINGS_UPDATE = "settings:update"
 PERM_ONBOARDING_COMPLETE = "onboarding:complete"
 
+PERM_DASHBOARD_STATS_READ = "dashboard:stats:read"
+
 # Role Permission Mappings
 ROLE_PERMISSIONS = {
     UserRole.ORG_OWNER: ["*"],  # Super admin for the organization
@@ -49,6 +51,7 @@ ROLE_PERMISSIONS = {
         PERM_INVITATIONS_REVOKE,
 
         PERM_ANALYTICS_READ,
+        PERM_DASHBOARD_STATS_READ,
         
         # Reports
         PERM_REPORTS_READ,
@@ -88,6 +91,7 @@ ROLE_PERMISSIONS = {
         
         # Reports
         PERM_REPORTS_READ,
+        PERM_DASHBOARD_STATS_READ,
         
         # Patients
         PERM_PATIENTS_CREATE,
@@ -106,6 +110,9 @@ ROLE_PERMISSIONS = {
     ],
     
     UserRole.NURSE: [
+        # Dashboard
+        PERM_DASHBOARD_STATS_READ,
+        
         # Patients
         PERM_PATIENTS_READ,
         PERM_PATIENTS_UPDATE,
@@ -119,6 +126,9 @@ ROLE_PERMISSIONS = {
     ],
     
     UserRole.COORDINATOR: [
+        # Dashboard
+        PERM_DASHBOARD_STATS_READ,
+        
         # Patients
         PERM_PATIENTS_READ,
         

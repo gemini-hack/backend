@@ -98,6 +98,42 @@ class QueryBuilder:
         count_query = select(sa_func.count()).select_from(self._query.subquery())
         result = await self.db.execute(count_query)
         return result.scalar() or 0
+    
+    # --- Analytics Extensions ---
+    
+    def for_organization(self, organization_id) -> "QueryBuilder":
+        """Filter by organization_id field."""
+        self._query = self._query.where(self.model_class.organization_id == organization_id)
+        return self
+    
+    def with_status(self, status: Any) -> "QueryBuilder":
+        """Filter by status field."""
+        self._query = self._query.where(self.model_class.status == status)
+        return self
+    
+    def created_after(self, dt: datetime) -> "QueryBuilder":
+        """Filter records created after a datetime."""
+        self._query = self._query.where(self.model_class.created_at >= dt)
+        return self
+    
+    def created_before(self, dt: datetime) -> "QueryBuilder":
+        """Filter records created before a datetime."""
+        self._query = self._query.where(self.model_class.created_at <= dt)
+        return self
+    
+    def for_patients(self, patient_ids: list) -> "QueryBuilder":
+        """Filter by patient_id field (for models with patient_id FK)."""
+        if hasattr(self.model_class, 'patient_id'):
+            self._query = self._query.where(self.model_class.patient_id.in_(patient_ids))
+        elif hasattr(self.model_class, 'id'):
+            self._query = self._query.where(self.model_class.id.in_(patient_ids))
+        return self
+    
+    async def count_distinct(self, column: Any) -> int:
+        """Return count of distinct values for a column."""
+        count_query = select(sa_func.count(sa_func.distinct(column))).select_from(self._query.subquery())
+        result = await self.db.execute(count_query)
+        return result.scalar() or 0
 
 
 class BaseModel(Base):
