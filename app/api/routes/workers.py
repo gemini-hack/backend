@@ -8,14 +8,48 @@ from fastapi.encoders import jsonable_encoder
 from app.api.dependencies import CurrentUser, DbSession, get_client_ip, require_permission
 from app.services.caseload_service import CaseloadService
 from app.services.user_service import UserService
+from app.services.analytics_service import AnalyticsService
 from app.schemas.auth import (
     InviteWorkerRequest,
     UserResponse,
 )
+from app.schemas.analytics import WorkerDashboardStats
 from app.models.user import InvitationStatus
 from app.utils.responses import success_response
 
 router = APIRouter(prefix="/workers", tags=["Workers"])
+
+
+@router.get(
+    "/dashboard/stats",
+    status_code=status.HTTP_200_OK,
+    response_model=WorkerDashboardStats,
+    summary="Get worker dashboard statistics",
+    dependencies=[Depends(require_permission("dashboard:stats:read"))],
+)
+async def get_worker_dashboard_stats(
+    user: CurrentUser,
+    db: DbSession,
+):
+    """
+    Get dashboard statistics for workers.
+    
+    For workers (doctor, nurse, coordinator): Returns stats for their assigned patients only.
+    For admins (org_owner, org_admin): Returns org-wide stats.
+    
+    Returns:
+    - total_patients: Patients with agent actions
+    - needs_attention: Patients requiring follow-up
+    - pending_actions: Unresolved actions count
+    - resolved_today: Actions completed today
+    """
+    service = AnalyticsService(db)
+    stats = await service.get_worker_dashboard_stats(
+        organization_id=user.organization_id,
+        worker_id=user.id,
+        user_role=user.role.value if user.role else None
+    )
+    return stats
 
 
 @router.post(
