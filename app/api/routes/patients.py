@@ -186,7 +186,15 @@ async def get_patient_agent_actions(
     result = await db.execute(stmt)
     actions = result.scalars().all()
 
-    return actions
+    response = []
+    for action in actions:
+        item = AgentActionResponse.model_validate(action)
+        # We have the patient object already
+        item.patient_name = f"{patient.first_name} {patient.last_name}"
+        item.patient_uid = patient.patient_uid
+        response.append(item)
+
+    return response
 
 
 @router.post(
