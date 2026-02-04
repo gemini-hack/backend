@@ -45,4 +45,12 @@ jobs:
             echo "Seeding email templates..."
             docker compose -f compose.yml exec -T app python scripts/seed_templates.py
             
+            # --- TEMPORARY: RESET DB & IMPORT NEW SCENARIOS ---
+            echo "Generating Fresh Scenarios CSV..."
+            docker compose -f compose.yml exec -T app python scripts/generate_patient_csv.py
+            
+            echo "Running DB Reset & Import..."
+            docker compose -f compose.yml exec -T app python scripts/reset_db_and_import_csv.py
+            # --------------------------------------------------
+            
             echo "Deployment completed successfully!"
