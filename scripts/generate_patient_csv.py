@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 import uuid
 
 # Output file
-OUTPUT_FILE = "mira_patient_scenarios.csv"
+OUTPUT_FILE = "/tmp/mira_patient_scenarios.csv"
 NUM_RANDOM_PATIENTS = 47 # Total 50 (3 fixed + 47 random)
 
 # Extended Headers matching user request + EMAIL

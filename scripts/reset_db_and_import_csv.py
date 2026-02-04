@@ -10,7 +10,7 @@ from app.models.user import Organization, User, Team
 from app.models.patient import Patient, Gender, PatientStatus, CommunicationPreference, HealthReading
 from app.models.conditions import Condition, HIVProfile, RegimenLine, EnrollmentSetting
 
-CSV_FILE = "mira_patient_scenarios.csv"
+CSV_FILE = "/tmp/mira_patient_scenarios.csv"
 
 # Admin & Worker Emails to PRESERVE (Though we aren't deleting Users anyway)
 PRESERVED_EMAILS = ["koko4lyfe@gmail.com", "winterfell856@gmail.com", "admin@lagosgeneralhospital.ng"]
