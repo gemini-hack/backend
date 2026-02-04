@@ -132,10 +132,6 @@ async def list_resolved_actions(
     total_result = await db.execute(count_query)
     total_count = total_result.scalar()
     
-            "actions": []
-        }
-    )
-    
     action_responses = []
     for a in actions:
         item = AgentActionResponse.model_validate(a)
