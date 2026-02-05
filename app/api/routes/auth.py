@@ -12,6 +12,7 @@ from app.api.dependencies import (
     get_client_ip,
     get_user_agent,
 )
+from app.core.rate_limiter import limiter
 from app.services.auth_service import AuthService
 from app.services.password_service import PasswordService
 from app.services.user_service import UserService
@@ -77,6 +78,7 @@ async def register(
     summary="Login",
     description="Authenticate with email and password.",
 )
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     data: LoginRequest,
@@ -109,6 +111,7 @@ async def login(
     status_code=status.HTTP_200_OK,
     summary="Refresh access token",
 )
+@limiter.limit("20/minute")
 async def refresh_token(
     request: Request,
     data: RefreshRequest,

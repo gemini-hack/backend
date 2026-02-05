@@ -56,11 +56,16 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
+
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize Rate Limiter
+from app.core.rate_limiter import init_rate_limiter
+init_rate_limiter(app)
 
 # Add correlation ID middleware
 app.add_middleware(CorrelationIdMiddleware)

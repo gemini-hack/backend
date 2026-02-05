@@ -40,6 +40,8 @@ dependencies = [
     "tenacity>=8.2.0",
     # SMS (Twilio)
     "twilio>=9.0.0",
+    "faker>=40.1.2",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]
