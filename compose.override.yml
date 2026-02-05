@@ -1,0 +1,16 @@
+services:
+  app:
+    volumes:
+      - .:/app
+      # Exclude the virtual environment so Docker uses its own
+      - /app/.venv
+
+  worker:
+    volumes:
+      - .:/app
+      - /app/.venv
+
+  # agent:
+  #   volumes:
+  #     - .:/app
+  #     - /app/.venv
