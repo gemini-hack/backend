@@ -26,6 +26,10 @@ class AlertResponse(AlertBase):
     resolved_at: Optional[datetime] = None
     created_at: datetime
     
+    # Enriched fields (populated by router)
+    patient_name: Optional[str] = None
+    patient_uid: Optional[str] = None
+    
     model_config = ConfigDict(from_attributes=True)
 
 class AgentActionBase(BaseModel):
@@ -50,6 +54,10 @@ class AgentActionResponse(AgentActionBase):
     
     # Decision trace: Full audit trail of agent reasoning
     decision_trace: Optional[Dict[str, Any]] = None
+    
+    # Enriched fields (populated by router)
+    patient_name: Optional[str] = None
+    patient_uid: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
