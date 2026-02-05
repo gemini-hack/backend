@@ -549,3 +549,77 @@ class UserService(BaseService):
         await self.db.refresh(worker)
         logger.info(f"Worker {worker.email} status updated to active={is_active} by admin {admin_id}")
         return worker
+
+    async def list_workers_activity(self, organization_id: UUID) -> list[dict]:
+        """
+        Get activity stats for all workers in an organization.
+        
+        Aggregates data from AnalyticsService for each worker.
+        """
+        # Get all active workers
+        workers = await User.query(self.db).filter(
+            User.organization_id == organization_id,
+            User.is_active == True
+        ).all()
+        
+        from app.services.analytics_service import AnalyticsService
+        analytics_service = AnalyticsService(self.db)
+        
+        activity_list = []
+        for worker in workers:
+            # Skip admins if they don't have clinical roles, unless desired
+            # For now include everyone who is a worker
+            
+            stats = await analytics_service.get_worker_dashboard_stats(
+                organization_id=organization_id,
+                worker_id=worker.id,
+                user_role=worker.role.value
+            )
+            
+            # Determine online status simplistically (e.g., if last_login within 15 min)
+            # For now, just return "offline" or "online" based on a heuristic if available, 
+            # or default to "offline" if not tracked. 
+            # Assuming 'is_active' implies account status, not presence.
+            
+            activity_list.append({
+                "worker_id": str(worker.id),
+                "name": f"{worker.first_name} {worker.last_name}",
+                "role": worker.role.value,
+                "email": worker.email,
+                "caseload_size": stats.get("total_patients", 0),
+                "active_alerts": stats.get("needs_attention", 0),
+                "pending_actions": stats.get("pending_actions", 0),
+                "resolved_today": stats.get("resolved_today", 0),
+                # Add calculated efficiency or other metrics here
+            })
+            
+        # Sort by caseload size descending
+        activity_list.sort(key=lambda x: x["caseload_size"], reverse=True)
+        
+        return activity_list
+
+    async def get_worker_activity(self, worker_id: UUID) -> dict:
+        """Get activity stats for a single worker."""
+        worker = await self.db.get(User, worker_id)
+        if not worker:
+            raise NotFoundException("Worker not found")
+            
+        from app.services.analytics_service import AnalyticsService
+        analytics_service = AnalyticsService(self.db)
+        
+        stats = await analytics_service.get_worker_dashboard_stats(
+            organization_id=worker.organization_id,
+            worker_id=worker.id,
+            user_role=worker.role.value
+        )
+        
+        return {
+            "worker_id": str(worker.id),
+            "name": f"{worker.first_name} {worker.last_name}",
+            "role": worker.role.value,
+            "email": worker.email,
+            "caseload_size": stats.get("total_patients", 0),
+            "active_alerts": stats.get("needs_attention", 0),
+            "pending_actions": stats.get("pending_actions", 0),
+            "resolved_today": stats.get("resolved_today", 0),
+        }
