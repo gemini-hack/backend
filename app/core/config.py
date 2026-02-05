@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # Security
-    CORS_ORIGINS: str = "https://miraproject.online"
+    CORS_ORIGINS: str = "https://miraproject.online,https://www.miraproject.online,http://localhost:3000,http://localhost:8000"
     MAX_LOGIN_ATTEMPTS: int = 5
     LOCKOUT_DURATION_MINUTES: int = 15
     REQUIRE_EMAIL_VERIFICATION: bool = True
