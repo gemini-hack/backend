@@ -8,6 +8,8 @@ Mira AI is an advanced healthcare provider assistant designed to empower medical
 
 Mira uses a **T-MAC (Team Multi-Agent Collaboration)** architecture where specialized AI agents work together like a clinical team:
 
+![AI Agent Orchestra Flow](docs/images/ai-agent-orchestra-flow.png)
+
 ### How It Works
 
 ```
@@ -113,6 +115,9 @@ curl -N "http://localhost:8000/api/v1/agents/stream/abc-123" \
 | **Streaming** | [Redis Pub/Sub](https://redis.io/) + SSE |
 | **Tasks** | [Celery](https://docs.celeryq.dev/) |
 | **Infrastructure** | [Docker](https://www.docker.com/) |
+
+### System Flow
+![MIRA Backend API Flow](docs/images/mira-backend-api-flow.png)
 
 ---
 
