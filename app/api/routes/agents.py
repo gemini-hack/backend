@@ -185,6 +185,18 @@ async def resolve_action_endpoint(
     await resolve_action(db, action_id, f"Manually resolved by {user.email}: {reason}")
     await db.commit()
     
+    # Push real-time notification to dashboard (triggers toast + stat card update)
+    try:
+        from app.services.dashboard_notifier import DashboardNotifier
+        notifier = DashboardNotifier(user.organization_id)
+        await notifier.notify_action_resolved(
+            action_id=action_id,
+            action_type=action.action_type,
+            reason=reason,
+        )
+    except Exception as e:
+        logger.warning(f"Dashboard notification failed (non-blocking): {e}")
+    
     return success_response(
         status_code=200,
         message="Action resolved successfully",
@@ -229,28 +241,30 @@ async def list_alerts(
     dependencies=[Depends(require_permission("agents:trigger"))],
 )
 async def trigger_analysis_rounds(
-    background_tasks: BackgroundTasks,
     user: CurrentUser,
     db: DbSession,
 ):
     """
     Manually trigger a morning rounds analysis for the organization.
     
+    The analysis runs on the Celery worker (not the API server) to avoid
+    blocking HTTP requests during heavy LLM processing.
+    
     Returns a cycle_id that can be used to subscribe to the thought stream.
     Connect to `/agents/stream/{cycle_id}` BEFORE calling this endpoint
     to observe the AI's thinking in real-time.
     """
     import uuid
-    from app.workflows.daily_analysis import DailyAnalysisWorkflow
+    from app.tasks.analysis import run_org_analysis
     
     cycle_id = uuid.uuid4()
     
-    workflow = DailyAnalysisWorkflow(db)
-    background_tasks.add_task(workflow.execute_for_org, user.organization_id, cycle_id)
+    # Dispatch to Celery worker — keeps the API server free
+    run_org_analysis.delay(str(user.organization_id), str(cycle_id))
     
     return success_response(
         status_code=202,
-        message="Analysis rounds triggered in background. Subscribe to stream for real-time thoughts.",
+        message="Analysis rounds dispatched to worker. Subscribe to stream for real-time thoughts.",
         data={
             "cycle_id": str(cycle_id),
             "stream_url": f"/api/v1/agents/stream/{cycle_id}",

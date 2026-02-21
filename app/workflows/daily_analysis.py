@@ -92,10 +92,17 @@ class DailyAnalysisWorkflow:
         - Supervisor reasoning (final synthesis)
         - Critic validation (safety review)
         
+        Includes deduplication: skips actions if an identical pending action
+        already exists for the same (patient_id, action_type).
+        
         Complexity: O(n × m) where n=actions, m=workers
         """
+        from app.models.agent import ActionOutcome as DBActionOutcome
+        from sqlalchemy import and_
+        
         alert_count = 0
         action_types_seen = set()
+        skipped_duplicates = 0
         
         # 1. Capture Critic Reviews (Global for this cycle)
         critic_results = context.worker_results.get("quality_doctor_critic")
@@ -110,8 +117,29 @@ class DailyAnalysisWorkflow:
         for action in context.final_actions:
             action_types_seen.add(action.type)
             
+            # DEDUPLICATION: Skip if identical pending action already exists
+            existing_query = select(AgentAction.id).where(
+                and_(
+                    AgentAction.patient_id == uuid.UUID(action.target_id),
+                    AgentAction.organization_id == context.organization_id,
+                    AgentAction.action_type == action.type,
+                    AgentAction.outcome.in_([
+                        DBActionOutcome.PENDING,
+                        DBActionOutcome.SENT,
+                    ])
+                )
+            ).limit(1)
+            existing_result = await self.db.execute(existing_query)
+            if existing_result.scalar_one_or_none():
+                skipped_duplicates += 1
+                logger.debug(f"Skipping duplicate action {action.type} for patient {action.target_id}")
+                continue
+            
             # 2. Build the Decision Trace (The "Brain Dump")
             trace = {
+                "cycle_id": str(context.cycle_id),
+                "cycle_timestamp": context.start_time.isoformat(),
+                "workers_in_cycle": list(context.worker_results.keys()),
                 "specialists": [],
                 "supervisor": {
                     "reasoning": action.reasoning,
@@ -234,5 +262,5 @@ class DailyAnalysisWorkflow:
             logger.warning(f"Dashboard notification failed (non-blocking): {e}")
         
         logger.info(f"Action types seen: {action_types_seen}")
-        logger.info(f"Created {alert_count} alerts from {len(context.final_actions)} actions (with decision traces)")
+        logger.info(f"Created {alert_count} alerts from {len(context.final_actions)} actions (with decision traces). Skipped {skipped_duplicates} duplicates.")
 

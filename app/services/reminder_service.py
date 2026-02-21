@@ -75,13 +75,23 @@ class ReminderService:
             self.db.add(reminder)
             await self.db.flush()
             
-            # Schedule the Celery task
-            from app.tasks.reminders import send_reminder
-            send_reminder.apply_async(
-                args=[str(reminder.id)],
-                eta=send_time,
-            )
-            logger.info(f"Scheduled on-demand reminder {reminder.id} for {send_time}")
+            # Only dispatch immediately for near-future reminders (< 25 min).
+            # Far-future reminders are picked up by the daily sweep task
+            # (schedule_daily_reminders at 5am) which checks scheduled_send_time.
+            # This avoids RabbitMQ consumer_timeout kills from long ETA waits.
+            minutes_until_send = (send_time - now).total_seconds() / 60
+            if minutes_until_send <= 25:
+                from app.tasks.reminders import send_reminder
+                send_reminder.apply_async(
+                    args=[str(reminder.id)],
+                    eta=send_time,
+                )
+                logger.info(f"Dispatched immediate reminder {reminder.id} (ETA {send_time})")
+            else:
+                logger.info(
+                    f"Stored reminder {reminder.id} for {send_time} "
+                    f"— daily sweep will dispatch it"
+                )
         except Exception as e:
             if "unique constraint" not in str(e).lower():
                 logger.error(f"Failed to schedule reminder: {e}")

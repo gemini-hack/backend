@@ -100,9 +100,9 @@ celery_app.autodiscover_tasks(["app.tasks"])
 
 # Set up the periodic schedule (Morning Rounds + Reminders)
 celery_app.conf.beat_schedule = {
-    "schedule-daily-reminders-at-5am": {
+    "schedule-reminders-sweep": {
         "task": "app.tasks.reminders.schedule_daily_reminders",
-        "schedule": crontab(hour=5, minute=0),
+        "schedule": crontab(minute="*/30"),
     },
     "run-daily-analysis-at-6am": {
         "task": "app.tasks.analysis.run_daily_analysis",
@@ -111,6 +111,14 @@ celery_app.conf.beat_schedule = {
     "escalate-no-shows-at-7am": {
         "task": "app.tasks.reminders.escalate_no_shows",
         "schedule": crontab(hour=7, minute=0),
+    },
+    "resolve-actions-every-30-min": {
+        "task": "app.tasks.resolution_tasks.resolve_completed_actions",
+        "schedule": crontab(minute="*/30"),
+    },
+    "expire-stale-actions-at-midnight": {
+        "task": "app.tasks.resolution_tasks.expire_stale_actions",
+        "schedule": crontab(hour=0, minute=0),
     },
 }
 

@@ -25,13 +25,13 @@ from app.utils.logger import logger
 @celery_app.task(name="app.tasks.reminders.schedule_daily_reminders")
 def schedule_daily_reminders():
     """
-    Runs at 5am daily via Celery Beat.
-    Creates reminder records for appointments in next 48 hours.
-    Then schedules individual send tasks at appropriate times.
+    Runs every 30 minutes via Celery Beat.
     
-    Complexity Analysis:
-    - Time: O(n) where n = appointments in next 48h
-    - Space: O(1) - records created in DB, not memory
+    Two responsibilities:
+    1. Create reminder records for appointments in the next 48 hours
+       (via ReminderService — idempotent, won't duplicate).
+    2. Dispatch any SCHEDULED reminders whose send_time is now due
+       (picks up far-future reminders that weren't dispatched at creation).
     """
     logger.info("Celery task: schedule_daily_reminders started")
     
@@ -40,7 +40,7 @@ def schedule_daily_reminders():
             now = datetime.now(timezone.utc)
             cutoff = now + timedelta(hours=48)
             
-            # Query scheduled appointments in next 48 hours
+            # --- Part 1: Create reminders for upcoming appointments ---
             query = (
                 select(Appointment)
                 .where(
@@ -58,19 +58,38 @@ def schedule_daily_reminders():
             
             logger.info(f"Found {len(appointments)} appointments in next 48 hours")
             
-            reminders_created = 0
-            
-            results_count = 0
             from app.services.reminder_service import ReminderService
             reminder_service = ReminderService(db)
             
             for appt in appointments:
-                # Use centralized service to handle logic
-                # It handles checking for status and creating if needed
                 await reminder_service.schedule_reminders_for_appointment(appt.id)
-                results_count += 1
             
-            logger.info(f"Daily sweep processed {results_count} appointments")
+            # --- Part 2: Dispatch due reminders that weren't sent yet ---
+            due_window = now + timedelta(minutes=35)  # grab anything due in next 35 min
+            due_query = (
+                select(AppointmentReminder)
+                .where(
+                    and_(
+                        AppointmentReminder.status == ReminderStatus.SCHEDULED,
+                        AppointmentReminder.scheduled_send_time <= due_window,
+                    )
+                )
+            )
+            due_result = await db.execute(due_query)
+            due_reminders = due_result.scalars().all()
+            
+            dispatched = 0
+            for reminder in due_reminders:
+                send_reminder.apply_async(
+                    args=[str(reminder.id)],
+                    eta=reminder.scheduled_send_time if reminder.scheduled_send_time > now else None,
+                )
+                dispatched += 1
+            
+            if dispatched:
+                logger.info(f"Dispatched {dispatched} due reminders")
+            
+            logger.info(f"Daily sweep processed {len(appointments)} appointments")
     
     try:
         asyncio.run(_schedule())
@@ -109,8 +128,8 @@ def send_reminder(self, reminder_id: str):
             )
             
             if not reminder:
-                logger.error(f"Reminder {reminder_id} not found")
-                return False
+                logger.warning(f"Reminder {reminder_id} not found — skipping (no retry)")
+                return True  # Permanent failure: do NOT retry for missing records
             
             if reminder.status != ReminderStatus.SCHEDULED:
                 logger.info(f"Reminder {reminder_id} already processed (status: {reminder.status})")
