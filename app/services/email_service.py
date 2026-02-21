@@ -162,19 +162,7 @@ class EmailService:
         appointment_type: str,
         provider_name: str | None = None,
     ) -> bool:
-        """
-        Send appointment reminder email.
-        
-        Args:
-            to_email: Patient email address
-            patient_name: Patient's first name
-            appointment_time: Formatted appointment time string
-            appointment_type: Type of appointment (e.g., "Follow-up", "Lab Review")
-            provider_name: Optional provider/doctor name
-        
-        Returns:
-            True if sent successfully
-        """
+        """Send appointment reminder email."""
         context = {
             "patient_name": patient_name,
             "appointment_time": appointment_time,

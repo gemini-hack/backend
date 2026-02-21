@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
 
 from app.utils.logger import logger
-from app.utils.exceptions import BaseAPIException
+from app.utils.exceptions import BaseAPIException, CalendarServiceError
 
 
 async def base_api_exception_handler(request: Request, exc: BaseAPIException):
@@ -31,15 +31,22 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
     """Handle validation errors and log them."""
     logger.warning(
         f"Validation error on {request.method} {request.url.path}",
-        extra={"errors": exc.errors()}
     )
+    safe_errors = []
+    for err in exc.errors():
+        safe_err = {
+            "loc": err.get("loc"),
+            "msg": err.get("msg"),
+            "type": err.get("type"),
+        }
+        safe_errors.append(safe_err)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "status": "failure",
             "status_code": 422,
             "message": "Validation error",
-            "error": {"details": exc.errors()}
+            "error": {"details": safe_errors}
         }
     )
 
@@ -64,6 +71,22 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+async def calendar_service_exception_handler(request: Request, exc: CalendarServiceError):
+    """Handle calendar service exceptions with proper status codes."""
+    logger.warning(
+        f"Calendar error on {request.method} {request.url.path}: {exc.message}",
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "failure",
+            "status_code": exc.status_code,
+            "message": exc.message,
+            "error": {}
+        }
+    )
+
+
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions and log them."""
     logger.exception(
@@ -75,7 +98,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={
             "status": "failure",
             "status_code": 500,
-            "message": str(exc),
+            "message": "An unexpected error occurred",
             "error": {}
         }
     )

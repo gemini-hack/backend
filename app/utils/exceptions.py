@@ -12,7 +12,6 @@ class BaseAPIException(HTTPException):
         super().__init__(status_code=status_code, detail=detail)
 
 
-# ============== Authentication Exceptions ==============
 
 class InvalidCredentialsException(BaseAPIException):
     """Invalid email or password."""
@@ -54,7 +53,6 @@ class EmailNotVerifiedException(BaseAPIException):
         )
 
 
-# ============== Token Exceptions ==============
 
 class TokenExpiredException(BaseAPIException):
     """Token has expired."""
@@ -76,7 +74,6 @@ class TokenInvalidException(BaseAPIException):
         )
 
 
-# ============== User/Organization Exceptions ==============
 
 class UserAlreadyExistsException(BaseAPIException):
     """User with this email already exists."""
@@ -98,7 +95,6 @@ class OrganizationAlreadyExistsException(BaseAPIException):
         )
 
 
-# ============== Invitation Exceptions ==============
 
 class InvitationExpiredException(BaseAPIException):
     """Invitation has expired."""
@@ -130,7 +126,6 @@ class InvitationNotFoundException(BaseAPIException):
         )
 
 
-# ============== Permission Exceptions ==============
 
 class PermissionDeniedException(BaseAPIException):
     """Permission denied."""
@@ -142,7 +137,6 @@ class PermissionDeniedException(BaseAPIException):
         )
 
 
-# ============== General Exceptions ==============
 
 class NotFoundException(BaseAPIException):
     """Resource not found."""
@@ -164,7 +158,6 @@ class BadRequestException(BaseAPIException):
         )
 
 
-# ============== Service Exceptions ==============
 
 class EmailDeliveryError(Exception):
     """Raised when email delivery fails."""
@@ -175,7 +168,6 @@ class EmailDeliveryError(Exception):
         super().__init__(message)
 
 
-# ============== Calendar Integration Exceptions ==============
 
 class CalendarServiceError(Exception):
     """Base exception for calendar service errors."""

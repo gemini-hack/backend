@@ -1,6 +1,3 @@
-"""
-Teams Router - API endpoints for team/department management.
-"""
 from typing import Optional
 from uuid import UUID
 

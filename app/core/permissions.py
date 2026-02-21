@@ -45,101 +45,76 @@ ROLE_PERMISSIONS = {
     UserRole.ORG_OWNER: ["*"],  # Super admin for the organization
     
     UserRole.ORG_ADMIN: [
-        # Invitations
         PERM_INVITATIONS_CREATE,
         PERM_INVITATIONS_READ,
         PERM_INVITATIONS_REVOKE,
 
         PERM_ANALYTICS_READ,
         PERM_DASHBOARD_STATS_READ,
-        
-        # Reports
         PERM_REPORTS_READ,
-        
-        # Users
+
         PERM_USERS_READ,
         PERM_USERS_UPDATE,
         PERM_USERS_DELETE,
-        
-        # Patients
+
         PERM_PATIENTS_CREATE,
         PERM_PATIENTS_READ,
         PERM_PATIENTS_UPDATE,
         PERM_PATIENTS_DELETE,
-        
-        # Appointments
+
         PERM_APPOINTMENTS_CREATE,
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
         PERM_APPOINTMENTS_DELETE,
-        
-        # Agents & Org
+
         PERM_AGENTS_READ,
         PERM_ALERTS_READ,
         PERM_AGENTS_TRIGGER,
         PERM_ORG_UPDATE,
-        
-        # Caseload
+
         PERM_CASELOAD_ASSIGN,
         PERM_CASELOAD_VIEW,
         PERM_WORKER_STATUS_UPDATE,
     ],
     
     UserRole.DOCTOR: [
-        # Users
         PERM_USERS_READ,
-        
-        # Reports
         PERM_REPORTS_READ,
         PERM_DASHBOARD_STATS_READ,
-        
-        # Patients
+
         PERM_PATIENTS_CREATE,
         PERM_PATIENTS_READ,
         PERM_PATIENTS_UPDATE,
-        
-        # Appointments
+
         PERM_APPOINTMENTS_CREATE,
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
-        
-        # Agents
+
         PERM_AGENTS_READ,
         PERM_ALERTS_READ,
         PERM_AGENTS_TRIGGER,
     ],
     
     UserRole.NURSE: [
-        # Dashboard
         PERM_DASHBOARD_STATS_READ,
-        
-        # Patients
         PERM_PATIENTS_READ,
         PERM_PATIENTS_UPDATE,
-        
-        # Appointments
+
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
-        
-        # Alerts
+
         PERM_ALERTS_READ,
     ],
     
     UserRole.COORDINATOR: [
-        # Dashboard
         PERM_DASHBOARD_STATS_READ,
-        
-        # Patients
         PERM_PATIENTS_READ,
-        
-        # Appointments
+
         PERM_APPOINTMENTS_CREATE,
         PERM_APPOINTMENTS_READ,
         PERM_APPOINTMENTS_UPDATE,
-        PERM_APPOINTMENTS_UPDATE,
         PERM_APPOINTMENTS_DELETE,
-        
-        # Caseload
+
         PERM_CASELOAD_ASSIGN,
         PERM_CASELOAD_VIEW,
     ],
