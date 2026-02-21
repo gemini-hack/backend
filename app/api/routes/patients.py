@@ -36,6 +36,7 @@ from app.schemas.agent import AgentActionResponse
 from app.services.patient_service import PatientService
 from app.services.storage_service import StorageService
 from app.services.ingestion_service import IngestionService
+from app.utils.logger import logger
 
 from app.services.team_service import PatientNotFoundError 
 
@@ -73,9 +74,9 @@ async def create_patient(
 
 @router.post("/ingest/document")
 async def ingest_medical_document(
+    current_user: CurrentUser,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = None
 ):
     """
     Upload a photo/PDF of a patient chart. 
@@ -116,7 +117,8 @@ async def ingest_medical_document(
             }
         )
     except Exception as e:
-        raise HTTPException(400, f"Failed to save extracted data: {str(e)}")
+        logger.exception(f"Ingestion save error: {e}")
+        raise HTTPException(400, "Failed to save extracted data.")
 
 @router.get(
     "",
@@ -236,11 +238,11 @@ async def batch_upload_patients(
     try:
         storage.upload_file(file, file_key)
     except Exception as e:
-        # Clear the cache on upload failure
         await redis.delete(cache_key)
+        logger.exception(f"File upload error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Failed to upload file: {str(e)}"
+            detail="Failed to upload file"
         )
     
     # Trigger Celery task
