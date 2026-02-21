@@ -77,15 +77,13 @@ async def livekit_webhook(request: Request):
     - room_finished: Call ended
     """
     body = await request.body()
-    
-    # Verify signature in production
-    if not settings.DEBUG:
-        signature = request.headers.get("X-LiveKit-Signature")
-        if not verify_webhook_signature(body, signature):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature"
-            )
+
+    signature = request.headers.get("X-LiveKit-Signature")
+    if not verify_webhook_signature(body, signature):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook signature"
+        )
     
     try:
         import json

@@ -75,8 +75,10 @@ class SupervisorAgent(BaseSupervisor):
         
         base_delay = 4  # Base delay in seconds
         max_retries = 3
+        gemini_semaphore = asyncio.Semaphore(2)  # Max 2 concurrent Gemini calls
         
-        for worker in self.workers:
+        async def _run_single_worker(worker):
+            """Run a single worker with retry logic and rate limiting."""
             retries = 0
             delay = base_delay
             
@@ -88,8 +90,9 @@ class SupervisorAgent(BaseSupervisor):
             
             while retries <= max_retries:
                 try:
-                    logger.info(f"📊 [{worker.name.upper()}] Specialist analyzing patient data...")
-                    await worker.run(context)
+                    async with gemini_semaphore:
+                        logger.info(f"📊 [{worker.name.upper()}] Specialist analyzing patient data...")
+                        await worker.run(context)
                     
                     worker_result = context.worker_results.get(worker.name)
                     if worker_result:
@@ -99,9 +102,9 @@ class SupervisorAgent(BaseSupervisor):
                             content=f"✅ Analysis complete. {len(worker_result.proposed_actions)} actions proposed, {len(worker_result.flagged_patients)} patients flagged."
                         )
                     
-                    logger.debug(f"Sleeping for {delay}s to respect Gemini Rate Limit...")
-                    await asyncio.sleep(delay)
-                    break  # Success, move to next worker
+                    # Small delay after release to space out Gemini calls
+                    await asyncio.sleep(base_delay)
+                    break  # Success
                 except Exception as e:
                     error_str = str(e)
                     if "RESOURCE_EXHAUSTED" in error_str and retries < max_retries:
@@ -121,7 +124,10 @@ class SupervisorAgent(BaseSupervisor):
                             stage=ThoughtStage.ERROR,
                             content=f"❌ Specialist failed: {error_str[:100]}"
                         )
-                        break  # Move to next worker on non-retryable error
+                        break  # Move on from non-retryable error
+        
+        # Run all workers in parallel (semaphore limits concurrent Gemini calls)
+        await asyncio.gather(*[_run_single_worker(w) for w in self.workers])
 
         # Synthesize Decisions (The Brain)
         await emitter.emit(

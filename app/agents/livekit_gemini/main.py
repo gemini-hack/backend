@@ -108,10 +108,9 @@ async def entrypoint(ctx: agents.JobContext):
         # Configure the RealtimeModel with VAD turn detection settings
         model = google.realtime.RealtimeModel(
             model="gemini-2.5-flash-native-audio-preview-12-2025",
-            voice="Kore",
+            voice="aoede",
             temperature=0.8,
             instructions=MIRA_INSTRUCTIONS,
-            # Enable input/output audio transcription for debugging
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
         )
@@ -134,24 +133,67 @@ async def entrypoint(ctx: agents.JobContext):
         await session.start(mira_agent, room=ctx.room)
         logger.info("AgentSession started with VAD turn detection.")
         
+        # --- OBSERVABILITY AND TELEMETRY ---
+        if settings.OTEL_ENABLED:
+            from livekit.agents.telemetry import set_tracer_provider
+            from opentelemetry import trace
+            # Link LiveKit telemetry to the global OTEL tracer provider
+            set_tracer_provider(trace.get_tracer_provider())
+            logger.info("LiveKit OpenTelemetry provider linked.")
+
+        # Metrics and Usage Collection
+        usage_collector = agents.metrics.UsageCollector()
+
+        @session.on("metrics_collected")
+        def _on_metrics_collected(ev: agents.MetricsCollectedEvent):
+            agents.metrics.log_metrics(ev.metrics)
+            usage_collector.collect(ev.metrics)
+        
+        async def on_session_shutdown():
+            """Capture final session report and usage summary on disconnect."""
+            logger.info(f"Session shutting down for room: {ctx.room.name}")
+            try:
+                # 1. Capture structured session report (transcripts, events, etc.)
+                session_report = ctx.make_session_report()
+                # Log the report existence - the API may vary between versions
+                report_info = str(type(session_report))
+                logger.info(f"Session report generated: {report_info}")
+                
+                # 2. Log final usage summary (tokens, duration, costs)
+                usage_summary = usage_collector.get_summary()
+                logger.info(f"Final Usage Summary: {usage_summary}")
+                
+            except Exception as e:
+                logger.error(f"Error generating session observability artifacts: {e}")
+
+        ctx.add_shutdown_callback(on_session_shutdown)
+
         # --- TRANSCRIPT AND ACTION LOGGING SETUP ---
         room_name = ctx.room.name
         transcript_buffer = get_buffer(room_name)
         set_current_room(room_name)
         logger.info(f"Transcript buffer initialized for room: {room_name}")
         
-        # Hook into transcript events from Gemini
-        @session.on("user_speech_committed")
-        async def on_user_speech(event):
+        # Async handlers for transcript events (spawned as background tasks)
+        async def _handle_user_speech(event):
             """Capture user (patient) speech transcripts."""
             transcript = getattr(event, 'transcript', None) or str(event)
             await transcript_buffer.add_entry("user", transcript)
         
-        @session.on("agent_speech_committed")
-        async def on_agent_speech(event):
+        async def _handle_agent_speech(event):
             """Capture agent (MIRA) speech transcripts."""
             transcript = getattr(event, 'transcript', None) or str(event)
             await transcript_buffer.add_entry("agent", transcript)
+        
+        # Hook into transcript events from Gemini
+        # NOTE: LiveKit requires sync callbacks - we spawn async tasks inside
+        @session.on("user_speech_committed")
+        def on_user_speech(event):
+            asyncio.create_task(_handle_user_speech(event))
+        
+        @session.on("agent_speech_committed")
+        def on_agent_speech(event):
+            asyncio.create_task(_handle_agent_speech(event))
 
         # Force speech to confirm audio track is published and working
         logger.info("Forcing initial greeting...")

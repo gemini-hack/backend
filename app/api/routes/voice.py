@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.api.dependencies import CurrentUser, DbSession
+from app.api.dependencies import CurrentUser, DbSession, require_permission
 from app.services.livekit_service import LiveKitService
 from app.core.config import settings
 from app.utils.responses import success_response
@@ -35,6 +35,7 @@ async def create_voice_session(
     The client uses these to connect via WebRTC.
     """
     import json
+    from livekit import api
     
     service = LiveKitService()
 
@@ -48,6 +49,33 @@ async def create_voice_session(
         "role": user.role.value,
         "full_name": user.full_name,
     })
+    
+    # Create the room explicitly with agent dispatch
+    # This is required for named agents (explicit dispatch mode)
+    if settings.ENABLE_AGENT_DISPATCH:
+        lk_api = api.LiveKitAPI(
+            url=settings.LIVEKIT_URL,
+            api_key=settings.LIVEKIT_API_KEY,
+            api_secret=settings.LIVEKIT_API_SECRET,
+        )
+        try:
+            await lk_api.room.create_room(
+                api.CreateRoomRequest(
+                    name=room_name,
+                    empty_timeout=300,  # 5 minutes
+                    metadata=user_metadata,  # Room-level metadata for agent
+                )
+            )
+            # Dispatch the named agent to this room
+            await lk_api.agent_dispatch.create_dispatch(
+                api.CreateAgentDispatchRequest(
+                    room=room_name,
+                    agent_name=settings.VOICE_AGENT_NAME,
+                    metadata=user_metadata,
+                )
+            )
+        finally:
+            await lk_api.aclose()
 
     # Generate access token for the user with metadata
     token = service.create_room_token(
@@ -79,12 +107,17 @@ async def end_voice_session(
     db: DbSession,
 ):
     """End a voice session and clean up the room."""
+    if not room_name.startswith(f"voice-{user.id}"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to end this session",
+        )
+
     service = LiveKitService()
 
     try:
         await service.delete_room(room_name)
-    except Exception as e:
-        # Room may not exist or already deleted
+    except Exception:
         pass
 
     return success_response(
@@ -97,6 +130,7 @@ async def end_voice_session(
     "/sessions",
     status_code=status.HTTP_200_OK,
     summary="List active voice sessions",
+    dependencies=[Depends(require_permission("agents:read"))],
 )
 async def list_voice_sessions(
     user: CurrentUser,
