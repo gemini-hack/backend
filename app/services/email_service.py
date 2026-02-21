@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.utils.logger import logger
 from app.models.template import EmailTemplate
 from app.utils.exceptions import EmailDeliveryError
+from app.core.observability import trace_method
 
 
 class EmailService:
@@ -75,6 +76,7 @@ class EmailService:
         
         return subject, html_body
 
+    @trace_method("email.send")
     async def _send(self, to_email: str, subject: str, html_content: str) -> bool:
         """Internal method to send email via SMTP. Raises EmailDeliveryError on failure."""
         if not self.host or self.host == "localhost":

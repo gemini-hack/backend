@@ -14,6 +14,7 @@ from app.core.redis import RedisManager
 from app.models.appointment import Appointment
 from app.utils.logger import logger
 from app.utils.exceptions import BaseAPIException
+from app.core.observability import trace_method
 
 
 class SMSRateLimitExceeded(BaseAPIException):
@@ -116,6 +117,7 @@ class SMSService:
         await redis.setex(key, 604800, "sent")
         return False
     
+    @trace_method("sms.send_reminder")
     async def send_appointment_reminder(
         self,
         to_phone: str,

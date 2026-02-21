@@ -15,6 +15,7 @@ from app.api.routes.teams import router as teams_router
 from app.api.routes.twilio_webhooks import router as twilio_webhooks_router
 from app.api.routes.voice import router as voice_router
 from app.api.routes.workers import router as workers_router
+from app.api.routes.observability import router as observability_router
 
 __all__ = [
     "agents_router",
@@ -34,4 +35,5 @@ __all__ = [
     "twilio_webhooks_router",
     "voice_router",
     "workers_router",
+    "observability_router",
 ]

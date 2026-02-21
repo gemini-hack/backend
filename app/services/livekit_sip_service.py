@@ -6,6 +6,7 @@ from livekit import api
 
 from app.core.config import settings
 from app.utils.logger import logger
+from app.core.observability import trace_method
 
 
 class LiveKitSIPService:
@@ -45,6 +46,7 @@ class LiveKitSIPService:
             api_secret=self.api_secret,
         )
     
+    @trace_method("telephony.outbound_call")
     async def initiate_outbound_call(
         self,
         patient_phone: str,

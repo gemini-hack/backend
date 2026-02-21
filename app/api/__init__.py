@@ -18,6 +18,7 @@ from app.api.routes import (
     twilio_webhooks_router,
     voice_router,
     workers_router,
+    observability_router,
 )
 
 # Main API router
@@ -41,3 +42,4 @@ api_router.include_router(twilio_webhooks_router)
 api_router.include_router(voice_router)
 api_router.include_router(livekit_webhooks_router)  # Tag: Webhooks
 api_router.include_router(workers_router)
+api_router.include_router(observability_router)
