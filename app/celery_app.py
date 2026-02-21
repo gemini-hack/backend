@@ -92,6 +92,8 @@ celery_app.conf.update(
         "app.tasks.analysis",
         "app.tasks.reminders",
         "app.tasks.call_processing",
+        "app.tasks.resolution_tasks",
+        "app.tasks.calendar_tasks",
     ]
 )
 
