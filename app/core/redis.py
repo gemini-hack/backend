@@ -26,10 +26,15 @@ class RedisManager:
         
         for attempt in range(max_retries):
             try:
+                # Use 127.0.0.1 explicitly to avoid IPv6 issues on Windows
+                redis_url = settings.REDIS_URL.replace("localhost", "127.0.0.1")
                 cls._redis = aioredis.from_url(
-                    settings.REDIS_URL, 
+                    redis_url, 
                     encoding="utf-8", 
-                    decode_responses=True
+                    decode_responses=True,
+                    max_connections=10,
+                    socket_connect_timeout=10,
+                    socket_timeout=10,
                 )
                 await cls._redis.ping()
                 logger.info(f"Successfully connected to Redis (attempt {attempt + 1})")
