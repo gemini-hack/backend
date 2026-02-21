@@ -144,7 +144,7 @@ async def preload_session_data(organization_id: UUID, user_id: UUID) -> SessionC
             cache.today_appointments.append({
                 "id": str(apt.id),
                 "scheduled_time": apt.scheduled_time.isoformat(),
-                "type": apt.type,
+                "appointment_type": apt.appointment_type,
                 "status": apt.status.value if apt.status else None,
                 "patient_name": f"{apt.patient.first_name} {apt.patient.last_name}" if apt.patient else "Unknown",
                 "patient_uid": apt.patient.patient_uid if apt.patient else None,

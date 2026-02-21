@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict, computed_field
+from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator
 from app.models.appointment import AppointmentStatus, VisitMode
 
 class AppointmentCreate(BaseModel):
@@ -11,8 +11,18 @@ class AppointmentCreate(BaseModel):
     provider_id: Optional[UUID] = None
     scheduled_time: datetime
     appointment_type: str = Field(..., min_length=1, max_length=100)
+    duration_minutes: int = Field(30, ge=1, le=480)
     visit_mode: VisitMode = VisitMode.IN_PERSON
     notes: Optional[str] = None
+
+    @field_validator('scheduled_time')
+    @classmethod
+    def scheduled_time_must_be_future(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        if v <= datetime.now(timezone.utc):
+            raise ValueError('Appointment time must be in the future')
+        return v
 
 class AppointmentResponse(BaseModel):
     id: UUID
@@ -23,8 +33,10 @@ class AppointmentResponse(BaseModel):
     appointment_type: str
     visit_mode: VisitMode
     status: AppointmentStatus
+    duration_minutes: int
     notes: Optional[str] = None
     priority_level: int
+    google_event_id: Optional[str] = None
     created_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +56,7 @@ class AppointmentUpdate(BaseModel):
     status: Optional[AppointmentStatus] = None
     notes: Optional[str] = None
     priority_level: Optional[int] = Field(None, ge=0, le=10)
+    duration_minutes: Optional[int] = Field(None, ge=1, le=480)
     provider_id: Optional[UUID] = None
 
 

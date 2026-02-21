@@ -97,7 +97,7 @@ class AnalyticsService:
         actions_pending = await (
             self._query(AgentAction)
             .for_organization(organization_id)
-            .filter(AgentAction.status == "pending")
+            .filter(AgentAction.outcome == ActionOutcome.PENDING)
             .count()
         )
         

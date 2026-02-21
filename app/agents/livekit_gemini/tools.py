@@ -203,7 +203,7 @@ async def get_today_appointments() -> str:
         lines = ["Today's Appointments:"]
         for apt in cache.today_appointments:
             time_str = datetime.fromisoformat(apt['scheduled_time']).strftime("%I:%M %p")
-            lines.append(f"- {time_str}: {apt['patient_name']} ({apt['type']})")
+            lines.append(f"- {time_str}: {apt['patient_name']} ({apt['appointment_type']})")
         return "\n".join(lines)
     
     # Fall back to database using QueryBuilder
