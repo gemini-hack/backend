@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import settings
 from app.db.base_model import Base
 
+# OpenTelemetry Instrumentation
+if settings.OTEL_ENABLED:
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    SQLAlchemyInstrumentor().instrument()
+
 # Create async engine for FastAPI (long-lived)
 engine = create_async_engine(
     settings.DATABASE_URL,

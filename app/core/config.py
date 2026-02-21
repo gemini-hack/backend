@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/integrations/google/callback"
     CALENDAR_ENCRYPTION_KEY: str = ""
+    
+    # Observability (OpenTelemetry)
+    OTEL_ENABLED: bool = False
+    OTEL_METRICS_ENABLED: bool = False  # Separate toggle for metrics (requires collector)
+    OTEL_SERVICE_NAME: str = "mira-ai-backend"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"
 
 
     @property

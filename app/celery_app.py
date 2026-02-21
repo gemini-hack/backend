@@ -3,6 +3,15 @@ from celery import Celery
 from celery.schedules import crontab
 from kombu import Exchange, Queue
 from app.core.config import settings
+from app.core.observability import setup_tracing
+
+# Initialize Tracing
+setup_tracing()
+
+# OpenTelemetry Instrumentation
+if settings.OTEL_ENABLED:
+    from opentelemetry.instrumentation.celery import CeleryInstrumentor
+    CeleryInstrumentor().instrument()
 
 # Define exchanges
 default_exchange = Exchange('default', type='direct')

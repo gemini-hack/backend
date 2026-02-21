@@ -7,17 +7,23 @@ from fastapi.exceptions import RequestValidationError, HTTPException
 
 from app.core.config import settings
 from app.middleware.correlation_middleware import CorrelationIdMiddleware
+from app.middleware.metrics_middleware import MetricsMiddleware
 from app.api import api_router
 from app.utils.logger import logger
 from app.db.database import engine
 from app.core.redis import RedisManager
-from app.utils.exceptions import BaseAPIException
+from app.utils.exceptions import BaseAPIException, CalendarServiceError
 from app.utils.exception_handlers import (
     base_api_exception_handler,
     request_validation_exception_handler,
     http_exception_handler,
+    calendar_service_exception_handler,
     general_exception_handler,
 )
+from app.core.observability import setup_observability
+
+# Initialize Observability
+setup_observability()
 
 # Configure basic logging for uvicorn integration
 logging.basicConfig(
@@ -53,7 +59,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware
+# OpenTelemetry Instrumentation - MUST be done before middleware
+if settings.OTEL_ENABLED:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    
+    # Instrument FastAPI app
+    FastAPIInstrumentor.instrument_app(app)
+    
+    # Instrument httpx for outgoing HTTP calls
+    HTTPXClientInstrumentor().instrument()
+    
+    # Instrument SQLAlchemy for database calls
+    SQLAlchemyInstrumentor().instrument()
+    
+    logger.info("FastAPI, HTTPX, and SQLAlchemy instrumented for OpenTelemetry")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,10 +87,14 @@ app.add_middleware(
 # Add correlation ID middleware
 app.add_middleware(CorrelationIdMiddleware)
 
+# Add metrics middleware for request tracking
+app.add_middleware(MetricsMiddleware)
+
 # Register exception handlers
 app.add_exception_handler(BaseAPIException, base_api_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(CalendarServiceError, calendar_service_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # Include API router
