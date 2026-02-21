@@ -1,5 +1,3 @@
-"""Authentication API routes."""
-
 from typing import Optional
 from uuid import UUID
 
@@ -29,12 +27,11 @@ from app.schemas.auth import (
     UserWithOrgResponse,
 )
 from app.utils.responses import success_response, auth_response, fail_response
+from app.utils.logger import logger
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-
-# ============== Registration ==============
 
 @router.post(
     "/register",
@@ -63,13 +60,11 @@ async def register(
             },
         )
     except Exception as e:
+        logger.exception(f"Registration error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Registration failed. Please try again.",
         )
-
-
-# ============== Login / Logout ==============
 
 @router.post(
     "/login",
@@ -98,9 +93,10 @@ async def login(
             data={"user": jsonable_encoder(result.user)},
         )
     except Exception as e:
+        logger.exception(f"Login error: {e}")
         return fail_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            message=str(e),
+            message="Authentication failed.",
         )
 
 
@@ -133,9 +129,10 @@ async def refresh_token(
             data=None,
         )
     except Exception as e:
+        logger.exception(f"Token refresh error: {e}")
         return fail_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            message=str(e),
+            message="Token refresh failed.",
         )
 
 
@@ -165,13 +162,11 @@ async def logout(
             message="Successfully logged out",
         )
     except Exception as e:
+        logger.exception(f"Logout error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Logout failed.",
         )
-
-
-# ============== Password Management ==============
 
 @router.post(
     "/change-password",
@@ -198,9 +193,10 @@ async def change_password(
             message="Password changed successfully",
         )
     except Exception as e:
+        logger.exception(f"Password change error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Password change failed.",
         )
 
 
@@ -226,9 +222,10 @@ async def forgot_password(
             message="If an account with this email exists, you will receive a password reset link",
         )
     except Exception as e:
+        logger.exception(f"Forgot password error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Request failed. Please try again.",
         )
 
 
@@ -255,13 +252,11 @@ async def reset_password(
             message="Password reset successfully. Please login with your new password.",
         )
     except Exception as e:
+        logger.exception(f"Password reset error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Password reset failed.",
         )
-
-
-# ============== Email Verification ==============
 
 @router.get(
     "/verify",
@@ -285,9 +280,10 @@ async def verify_email(
             message="Email verified successfully",
         )
     except Exception as e:
+        logger.exception(f"Email verification error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Verification failed.",
         )
 
 
@@ -313,13 +309,11 @@ async def resend_verification(
             message="If an account with this email exists and is not verified, you will receive a verification link",
         )
     except Exception as e:
+        logger.exception(f"Resend verification error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Request failed. Please try again.",
         )
-
-
-# ============== User Profile ==============
 
 @router.get(
     "/me",
@@ -330,7 +324,6 @@ async def get_current_user_profile(
     user: CurrentUser,
 ):
     """Get current user profile."""
-    # We validate user in dependency, so user is present
     return success_response(
         status_code=status.HTTP_200_OK,
         message="User profile retrieved",
@@ -365,13 +358,11 @@ async def update_profile(
             data=jsonable_encoder(UserWithOrgResponse.model_validate(updated_user)),
         )
     except Exception as e:
+        logger.exception(f"Profile update error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Profile update failed.",
         )
-
-
-# ============== Invitations (Public) ==============
 
 @router.get(
     "/invite/{token}",
@@ -392,9 +383,10 @@ async def get_invitation_details(
             data=jsonable_encoder(details),
         )
     except Exception as e:
+        logger.exception(f"Invitation details error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Could not retrieve invitation details.",
         )
 
 
@@ -424,13 +416,12 @@ async def accept_invitation(
             data={"user": jsonable_encoder(result.user)},
         )
     except Exception as e:
+        logger.exception(f"Accept invitation error: {e}")
         return fail_response(
             status_code=status.HTTP_400_BAD_REQUEST,
-            message=str(e),
+            message="Failed to accept invitation.",
         )
 
-
-# ============== Sessions ==============
 
 @router.get(
     "/sessions",
