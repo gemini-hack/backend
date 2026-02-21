@@ -85,6 +85,9 @@ class CalendarIntegration(BaseModel):
     # Calendar Info
     email: Mapped[str | None] = mapped_column(String(255)) 
     
+    # Target calendar for pushing MIRA events (default: "primary")
+    target_calendar_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="calendar_integrations")
     

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from html import escape
 from typing import Optional
 
 from fastapi import APIRouter, Depends, status
@@ -21,6 +22,8 @@ from app.schemas.calendar import (
     DisconnectResponse,
     CalendarListItem,
     CalendarListResponse,
+    SetTargetCalendarRequest,
+    SetTargetCalendarResponse,
 )
 from app.utils.responses import success_response
 from app.utils.logger import logger
@@ -57,6 +60,7 @@ async def get_calendar_status(
             status=IntegrationStatus(integration.status),
             provider=CalendarProvider.GOOGLE,
             email=integration.email,
+            target_calendar_id=integration.target_calendar_id,
             last_synced_at=integration.last_synced_at,
         )),
     )
@@ -114,7 +118,7 @@ async def google_auth_callback(
             <head><title>Authorization Failed</title></head>
             <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
                 <h1 style="color: #d32f2f;">Authorization Failed</h1>
-                <p>Error: {error}</p>
+                <p>Error: {escape(error)}</p>
                 <p>Please try again or contact support if the issue persists.</p>
             </body>
         </html>
@@ -267,3 +271,44 @@ async def list_google_calendars(
     except CalendarAPIError as e:
         logger.error(f"Failed to list calendars: {e}")
         raise CalendarAPIError("Failed to fetch calendars from Google")
+
+
+@router.put(
+    "/google/target-calendar",
+    status_code=status.HTTP_200_OK,
+    response_model=SetTargetCalendarResponse,
+    summary="Set target calendar for MIRA events",
+)
+async def set_target_calendar(
+    body: SetTargetCalendarRequest,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Set which Google Calendar MIRA should push appointment events to."""
+    service = GoogleCalendarService(db)
+    integration = await service.get_integration(user.id)
+
+    if not integration:
+        raise NotFoundException(
+            "No Google Calendar integration found. Please connect your calendar first."
+        )
+
+    if integration.needs_reauth():
+        raise CalendarAuthError("Calendar integration requires re-authentication")
+
+    integration.target_calendar_id = body.target_calendar_id
+    await db.commit()
+
+    logger.info(
+        f"User {user.id} set target calendar to '{body.target_calendar_id}'"
+    )
+
+    return success_response(
+        status_code=status.HTTP_200_OK,
+        message=f"Target calendar set to '{body.target_calendar_id}'",
+        data=jsonable_encoder(SetTargetCalendarResponse(
+            message=f"Target calendar set to '{body.target_calendar_id}'",
+            target_calendar_id=body.target_calendar_id,
+            provider=CalendarProvider.GOOGLE,
+        )),
+    )

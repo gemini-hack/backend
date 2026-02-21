@@ -1,9 +1,13 @@
+from __future__ import annotations
 import httpx
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
-from typing import Optional, List, Any
+from typing import Optional, List, Any, TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from app.models.appointment import Appointment
 
 from sqlalchemy import select
 from tenacity import (
@@ -55,8 +59,9 @@ class GoogleCalendarService(BaseService):
     CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3"
     USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo"
     
-    # OAuth scopes
+    # OAuth scopes - calendar.events for write, calendar.readonly for list/freebusy
     SCOPES = [
+        "https://www.googleapis.com/auth/calendar.events",
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/userinfo.email",
     ]
@@ -292,6 +297,12 @@ class GoogleCalendarService(BaseService):
         if not calendar_ids:
             calendar_ids = ["primary"]
         
+        # Ensure timezone-aware datetimes for Google API (requires RFC3339)
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        
         body = {
             "timeMin": start_time.isoformat(),
             "timeMax": end_time.isoformat(),
@@ -384,7 +395,9 @@ class GoogleCalendarService(BaseService):
         ]
     
     async def revoke_access(self, integration: CalendarIntegration) -> bool:
-        """Revoke the OAuth token at Google and delete the integration."""
+        """Revoke the OAuth token at Google, clean up google_event_ids, and delete the integration."""
+        from app.models.appointment import Appointment
+        
         try:
             # Get a valid token to revoke (or use refresh token)
             token_to_revoke = integration.refresh_token or integration.access_token # Transparently decrypted
@@ -397,6 +410,18 @@ class GoogleCalendarService(BaseService):
                 )
         except Exception as e:
             logger.warning(f"Token revocation failed (continuing with deletion): {e}")
+        
+        # Clear google_event_id on all appointments for this provider
+        from sqlalchemy import update
+        stmt = (
+            update(Appointment)
+            .where(
+                Appointment.provider_id == integration.user_id,
+                Appointment.google_event_id.isnot(None),
+            )
+            .values(google_event_id=None)
+        )
+        await self.db.execute(stmt)
         
         await self.db.delete(integration)
         await self.db.commit()
@@ -412,3 +437,322 @@ class GoogleCalendarService(BaseService):
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(CalendarAPIError),
+        reraise=True,
+    )
+    async def create_event(
+        self, 
+        integration: CalendarIntegration, 
+        appointment: Appointment
+    ) -> str:
+        """Create a new event on Google Calendar and return the external ID."""
+        token = await self.get_valid_token(integration)
+        
+        start_time = appointment.scheduled_time
+        end_time = start_time + timedelta(minutes=appointment.duration_minutes)
+        
+        body = {
+            "summary": f"MIRA Appointment: {appointment.appointment_type}",
+            "description": appointment.notes or "Scheduled via MIRA AI",
+            "start": {"dateTime": start_time.isoformat()},
+            "end": {"dateTime": end_time.isoformat()},
+            "reminders": {"useDefault": True},
+            "status": "confirmed",
+        }
+
+        client = get_http_client()
+        resp = await client.post(
+            f"{self.CALENDAR_API_BASE}/calendars/primary/events",
+            headers={"Authorization": f"Bearer {token}"},
+            json=body,
+        )
+
+        if resp.status_code == 401:
+            integration.mark_needs_reauth()
+            await self.db.commit()
+            raise CalendarAuthError("Token expired/revoked during write")
+
+        if resp.status_code != 200:
+            logger.error(f"Failed to create Google event: {resp.text}")
+            raise CalendarAPIError("Google Event creation failed", status_code=resp.status_code)
+
+        return resp.json()["id"]
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(CalendarAPIError),
+        reraise=True,
+    )
+    async def update_event(
+        self, 
+        integration: CalendarIntegration, 
+        event_id: str, 
+        appointment: Appointment
+    ) -> None:
+        """Update an existing Google Calendar event."""
+        token = await self.get_valid_token(integration)
+        
+        start_time = appointment.scheduled_time
+        end_time = start_time + timedelta(minutes=appointment.duration_minutes)
+        
+        body = {
+            "summary": f"MIRA Appointment (Rescheduled): {appointment.appointment_type}",
+            "description": appointment.notes or "Updated via MIRA AI",
+            "start": {"dateTime": start_time.isoformat()},
+            "end": {"dateTime": end_time.isoformat()},
+        }
+
+        client = get_http_client()
+        resp = await client.patch(
+            f"{self.CALENDAR_API_BASE}/calendars/primary/events/{event_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=body,
+        )
+
+        if resp.status_code == 404:
+            # Event was deleted externally, we should ideally re-create it or handle gracefully
+            logger.warning(f"Event {event_id} not found for update, likely deleted externally")
+            return
+
+        if resp.status_code != 200:
+            logger.error(f"Failed to update Google event: {resp.text}")
+            raise CalendarAPIError("Google Event update failed", status_code=resp.status_code)
+
+    async def delete_event(
+        self, 
+        integration: CalendarIntegration, 
+        event_id: str
+    ) -> None:
+        """Delete an event from Google Calendar."""
+        token = await self.get_valid_token(integration)
+        
+        client = get_http_client()
+        resp = await client.delete(
+            f"{self.CALENDAR_API_BASE}/calendars/primary/events/{event_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        if resp.status_code not in (204, 404):
+            logger.error(f"Failed to delete Google event: {resp.text}")
+            raise CalendarAPIError("Google Event deletion failed", status_code=resp.status_code)
+
+    # ============== Two-Way Sync: Event Push Methods ==============
+
+    def _build_event_body(self, appointment) -> dict:
+        """Build a Google Calendar event body from an Appointment."""
+        from app.models.appointment import VisitMode
+        
+        duration_minutes = 30  # Default slot duration
+        start_dt = appointment.scheduled_time
+        end_dt = start_dt + timedelta(minutes=duration_minutes)
+        
+        description_parts = []
+        if appointment.notes:
+            description_parts.append(appointment.notes)
+        description_parts.append(f"Visit Mode: {appointment.visit_mode.value}")
+        description_parts.append(f"Status: {appointment.status.value}")
+        description_parts.append("Managed by MIRA AI — do not edit directly.")
+        
+        body = {
+            "summary": f"MIRA: {appointment.appointment_type}",
+            "description": "\n".join(description_parts),
+            "start": {
+                "dateTime": start_dt.isoformat(),
+                "timeZone": "UTC",
+            },
+            "end": {
+                "dateTime": end_dt.isoformat(),
+                "timeZone": "UTC",
+            },
+            "source": {
+                "title": "MIRA AI",
+                "url": settings.API_BASE_URL,
+            },
+        }
+        return body
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(CalendarAPIError),
+        reraise=True,
+    )
+    async def create_event(
+        self,
+        integration: CalendarIntegration,
+        appointment,
+    ) -> str:
+        """
+        Create a Google Calendar event for an appointment.
+        
+        Returns:
+            The Google Calendar event ID.
+        """
+        token = await self.get_valid_token(integration)
+        calendar_id = integration.target_calendar_id or "primary"
+        body = self._build_event_body(appointment)
+        
+        client = get_http_client()
+        
+        try:
+            resp = await client.post(
+                f"{self.CALENDAR_API_BASE}/calendars/{calendar_id}/events",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+        except httpx.TimeoutException:
+            raise CalendarAPIError("Event creation timed out", status_code=504)
+        except httpx.RequestError as e:
+            raise CalendarAPIError(f"Network error during event creation: {e}")
+        
+        if resp.status_code == 401:
+            integration.mark_needs_reauth()
+            await self.db.commit()
+            raise CalendarAuthError("Access token invalid", details={"status": "needs_reauth"})
+        
+        if resp.status_code == 409:
+            logger.warning(f"Event conflict for appointment {appointment.id}")
+            raise CalendarAPIError("Event conflict on Google Calendar", status_code=409)
+        
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", 60))
+            raise CalendarRateLimitError(retry_after=retry_after)
+        
+        if resp.status_code not in (200, 201):
+            logger.error(f"Event creation failed: {resp.text}")
+            raise CalendarAPIError(
+                "Failed to create calendar event",
+                status_code=resp.status_code,
+            )
+        
+        event_id = resp.json().get("id")
+        logger.info(f"Created Google Calendar event {event_id} for appointment {appointment.id}")
+        return event_id
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(CalendarAPIError),
+        reraise=True,
+    )
+    async def update_event(
+        self,
+        integration: CalendarIntegration,
+        event_id: str,
+        appointment,
+    ) -> str:
+        """
+        Update an existing Google Calendar event.
+        
+        Uses PATCH for partial updates.
+        
+        Returns:
+            The Google Calendar event ID.
+        """
+        token = await self.get_valid_token(integration)
+        calendar_id = integration.target_calendar_id or "primary"
+        body = self._build_event_body(appointment)
+        
+        client = get_http_client()
+        
+        try:
+            resp = await client.patch(
+                f"{self.CALENDAR_API_BASE}/calendars/{calendar_id}/events/{event_id}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+        except httpx.TimeoutException:
+            raise CalendarAPIError("Event update timed out", status_code=504)
+        except httpx.RequestError as e:
+            raise CalendarAPIError(f"Network error during event update: {e}")
+        
+        if resp.status_code == 401:
+            integration.mark_needs_reauth()
+            await self.db.commit()
+            raise CalendarAuthError("Access token invalid", details={"status": "needs_reauth"})
+        
+        if resp.status_code == 404:
+            # Event was deleted externally — caller should handle by creating a new one
+            logger.warning(f"Event {event_id} not found on Google Calendar (deleted externally?)")
+            raise CalendarAPIError("Event not found on Google Calendar", status_code=404)
+        
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", 60))
+            raise CalendarRateLimitError(retry_after=retry_after)
+        
+        if resp.status_code != 200:
+            logger.error(f"Event update failed: {resp.text}")
+            raise CalendarAPIError(
+                "Failed to update calendar event",
+                status_code=resp.status_code,
+            )
+        
+        logger.info(f"Updated Google Calendar event {event_id} for appointment {appointment.id}")
+        return resp.json().get("id", event_id)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(CalendarAPIError),
+        reraise=True,
+    )
+    async def delete_event(
+        self,
+        integration: CalendarIntegration,
+        event_id: str,
+    ) -> bool:
+        """
+        Delete a Google Calendar event.
+        
+        Returns:
+            True if event was deleted (or already didn't exist).
+        """
+        token = await self.get_valid_token(integration)
+        calendar_id = integration.target_calendar_id or "primary"
+        
+        client = get_http_client()
+        
+        try:
+            resp = await client.delete(
+                f"{self.CALENDAR_API_BASE}/calendars/{calendar_id}/events/{event_id}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except httpx.TimeoutException:
+            raise CalendarAPIError("Event deletion timed out", status_code=504)
+        except httpx.RequestError as e:
+            raise CalendarAPIError(f"Network error during event deletion: {e}")
+        
+        if resp.status_code == 401:
+            integration.mark_needs_reauth()
+            await self.db.commit()
+            raise CalendarAuthError("Access token invalid", details={"status": "needs_reauth"})
+        
+        if resp.status_code == 404:
+            # Event already deleted externally — that's fine
+            logger.info(f"Event {event_id} already deleted from Google Calendar")
+            return True
+        
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", 60))
+            raise CalendarRateLimitError(retry_after=retry_after)
+        
+        if resp.status_code not in (200, 204):
+            logger.error(f"Event deletion failed: {resp.text}")
+            raise CalendarAPIError(
+                "Failed to delete calendar event",
+                status_code=resp.status_code,
+            )
+        
+        logger.info(f"Deleted Google Calendar event {event_id}")
+        return True

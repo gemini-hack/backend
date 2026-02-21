@@ -36,6 +36,7 @@ class CalendarIntegrationResponse(BaseModel):
     provider: CalendarProvider
     status: IntegrationStatus
     email: Optional[str] = None
+    target_calendar_id: Optional[str] = None
     last_synced_at: Optional[datetime] = None
     created_at: datetime
     
@@ -48,6 +49,7 @@ class CalendarStatusResponse(BaseModel):
     status: Optional[IntegrationStatus] = None
     provider: Optional[CalendarProvider] = None
     email: Optional[str] = None
+    target_calendar_id: Optional[str] = None
     last_synced_at: Optional[datetime] = None
 
 
@@ -87,3 +89,19 @@ class BusyPeriodsResponse(BaseModel):
     """Response containing busy periods."""
     busy_periods: list[BusyPeriod]
     calendar_ids: list[str] = Field(default_factory=lambda: ["primary"])
+
+
+class SetTargetCalendarRequest(BaseModel):
+    """Request to set which Google Calendar to push MIRA events to."""
+    target_calendar_id: str = Field(
+        ..., 
+        min_length=1,
+        description="The Google Calendar ID to push events to. Use 'primary' for the main calendar.",
+    )
+
+
+class SetTargetCalendarResponse(BaseModel):
+    """Response after setting the target calendar."""
+    message: str
+    target_calendar_id: str
+    provider: CalendarProvider
