@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from uuid import UUID
 from typing import List, Optional
 
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import Session
 
-from app.db.database import async_session_factory
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.calendar import CalendarIntegration, CalendarProvider
 from app.models.user import User
@@ -98,6 +98,7 @@ class AvailabilityService:
     @classmethod
     async def get_available_slots(
         cls, 
+        db: AsyncSession,
         org_id: UUID, 
         start_date: datetime, 
         end_date: datetime, 
@@ -107,100 +108,99 @@ class AvailabilityService:
         Get all available appointment slots between start_date and end_date.
         
         Logic:
-        1. Generate all theoretical slots within working hours.
-        2. Query existing scheduled appointments.
-        3. Check external calendars for busy periods.
-        4. Subtract booked slots from theoretical slots.
+        1. Query existing scheduled appointments.
+        2. Check external calendars for busy periods.
+        3. Generate theoretical slots and subtract booked slots.
         """
         if start_date >= end_date:
             return []
-            
-        # Ensure dates are timezone-aware (assuming UTC inputs for now)
-        # In a real app, care must be taken with organization timezones.
         
+        # Ensure timezone-aware datetimes to avoid naive vs aware comparison errors
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+            
         available_slots = []
         
-        async with async_session_factory() as db:
-            # 1. Fetch relevant appointments to block off time
-            query = select(Appointment).where(
-                Appointment.organization_id == org_id,
-                Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.COMPLETED]),
-                Appointment.scheduled_time >= start_date,
-                Appointment.scheduled_time < end_date
+        # 1. Fetch relevant appointments to block off time
+        query = select(Appointment).where(
+            Appointment.organization_id == org_id,
+            Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.COMPLETED]),
+            Appointment.scheduled_time >= start_date,
+            Appointment.scheduled_time < end_date
+        )
+        
+        calendar_busy_ranges = []
+        
+        if provider_id:
+            query = query.where(Appointment.provider_id == provider_id)
+            calendar_busy_ranges = await cls._fetch_calendar_busy_periods(
+                db, provider_id, start_date, end_date
             )
             
-            calendar_busy_ranges = []
+        result = await db.execute(query)
+        existing_appointments = result.scalars().all()
+        
+        # Normalize appointment times to match start_date timezone awareness
+        for appt in existing_appointments:
+            if appt.scheduled_time.tzinfo is None:
+                appt.scheduled_time = appt.scheduled_time.replace(tzinfo=timezone.utc)
+        
+        booked_times = {appt.scheduled_time.replace(second=0, microsecond=0) for appt in existing_appointments}
             
-            if provider_id:
-                # If checking for specific provider
-                query = query.where(Appointment.provider_id == provider_id)
-                
-                # Fetch external calendar busy periods
-                calendar_busy_ranges = await cls._fetch_calendar_busy_periods(
-                    db, provider_id, start_date, end_date
-                )
-                
-            else:
-                # Logic: If checking generally, we need to know WHICH providers are available.
-                # For this MVP, we might assume we are looking for ANY availability for the specific provider 
-                # OR if no provider specified, we might pick the first available one? 
-                # The prompt implies: "Priority to assigned provider, fallback to team."
-                # But for the service method signature, let's keep it simple: 
-                # If provider_id is None, we need to know capacity. 
-                # Simplification: The tool calling this will likely pass a provider_id from the patient's history.
-                # If not, we might be checking "any doctor".
-                pass
-
-            result = await db.execute(query)
-            existing_appointments = result.scalars().all()
-            
-            # Create a set of booked times for O(1) lookup
-            # Rounding existing appts to slot boundaries might be needed if they are off-grid
-            booked_times = {appt.scheduled_time.replace(second=0, microsecond=0) for appt in existing_appointments}
-            
-            # 2. Iterate through days and generate slots
-            current_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_day_boundary = end_date.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-            
-            while current_day < end_day_boundary:
-                # Skip weekends (5=Saturday, 6=Sunday)
-                if current_day.weekday() >= 5:
-                    current_day += timedelta(days=1)
-                    continue
-                
-                # Generate slots for this day
-                # Construct start/end DateTimes for the work day
-                day_start = datetime.combine(current_day.date(), cls.WORK_START).replace(tzinfo=start_date.tzinfo)
-                day_end = datetime.combine(current_day.date(), cls.WORK_END).replace(tzinfo=start_date.tzinfo)
-                
-                current_slot = day_start
-                while current_slot < day_end:
-                    # Check constraints:
-                    # 1. Must be strictly after requested start_date (if start_date is mid-day)
-                    # 2. Must be before end_date
-                    if current_slot >= start_date and current_slot < end_date:
-                        
-                        # INTERNAL CHECK
-                        if current_slot in booked_times:
-                            current_slot += timedelta(minutes=cls.SLOT_DURATION_MINUTES)
-                            continue
-                            
-                        # EXTERNAL CALENDAR CHECK
-                        is_externally_busy = False
-                        slot_end = current_slot + timedelta(minutes=cls.SLOT_DURATION_MINUTES)
-                        
-                        for busy_start, busy_end in calendar_busy_ranges:
-                            # Check overlap
-                            # Overlap exists if (SlotStart < BusyEnd) AND (SlotEnd > BusyStart)
-                            if current_slot < busy_end and slot_end > busy_start:
-                                is_externally_busy = True
-                                break
-                        
-                        if not is_externally_busy:
-                            available_slots.append(current_slot)
-                    
-                    current_slot += timedelta(minutes=cls.SLOT_DURATION_MINUTES)
-                
+        # 2. Iterate through days and generate slots
+        current_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_day_boundary = end_date.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+        while current_day < end_day_boundary:
+            # Skip weekends (5=Saturday, 6=Sunday)
+            if current_day.weekday() >= 5:
                 current_day += timedelta(days=1)
+                continue
+            
+            # Generate slots for this day
+            # Construct start/end DateTimes for the work day
+            day_start = datetime.combine(current_day.date(), cls.WORK_START).replace(tzinfo=start_date.tzinfo)
+            day_end = datetime.combine(current_day.date(), cls.WORK_END).replace(tzinfo=start_date.tzinfo)
+            
+            current_slot = day_start
+            while current_slot < day_end:
+                # Check constraints:
+                # 1. Must be strictly after requested start_date (if start_date is mid-day)
+                # 2. Must be before end_date
+                if current_slot >= start_date and current_slot < end_date:
+                    
+                    # INTERNAL CHECK (Overlap detection fallback)
+                    is_internally_busy = False
+                    slot_end = current_slot + timedelta(minutes=cls.SLOT_DURATION_MINUTES)
+                    
+                    for appt in existing_appointments:
+                        appt_end = appt.scheduled_time + timedelta(minutes=appt.duration_minutes)
+                        if current_slot < appt_end and slot_end > appt.scheduled_time:
+                            is_internally_busy = True
+                            break
+                            
+                    if is_internally_busy:
+                        current_slot += timedelta(minutes=cls.SLOT_DURATION_MINUTES)
+                        continue
+                        
+                    # EXTERNAL CALENDAR CHECK
+                    is_externally_busy = False
+                    slot_end = current_slot + timedelta(minutes=cls.SLOT_DURATION_MINUTES)
+                    
+                    for busy_start, busy_end in calendar_busy_ranges:
+                        # Check overlap
+                        # Overlap exists if (SlotStart < BusyEnd) AND (SlotEnd > BusyStart)
+                        if current_slot < busy_end and slot_end > busy_start:
+                            is_externally_busy = True
+                            break
+                    
+                    if not is_externally_busy:
+                        available_slots.append(current_slot)
                 
+                current_slot += timedelta(minutes=cls.SLOT_DURATION_MINUTES)
+            
+            current_day += timedelta(days=1)
+            
         return available_slots

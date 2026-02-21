@@ -83,6 +83,7 @@ celery_app.conf.update(
         'app.tasks.analysis.*': {'queue': 'high_priority'},
         'app.tasks.reminders.*': {'queue': 'celery'},
         'app.tasks.call_processing.*': {'queue': 'celery'},
+        'app.tasks.calendar_tasks.*': {'queue': 'celery'},
     },
     
     # Explicitly include the task modules

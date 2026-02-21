@@ -303,3 +303,33 @@ def create_reminder_from_agent_action(action_details: dict):
     except Exception as e:
         logger.exception(f"Failed to create reminder from agent action: {e}")
         raise
+
+
+@celery_app.task(name="app.tasks.reminders.send_booking_confirmation_task")
+def send_booking_confirmation_task(appointment_id: str):
+    """
+    Send an immediate booking confirmation to the patient.
+    """
+    logger.info(f"Sending booking confirmation for {appointment_id}")
+    
+    async def _send():
+        async with get_celery_session() as db:
+            appointment = await Appointment.fetch_one_with(
+                db, "patient",
+                id=UUID(appointment_id)
+            )
+            
+            if not appointment or not appointment.patient:
+                logger.warning(f"Appointment {appointment_id} or patient not found")
+                return
+            
+            manager = NotificationManager(db)
+            await manager.send_booking_confirmation(
+                patient=appointment.patient,
+                appointment=appointment
+            )
+            
+    try:
+        asyncio.run(_send())
+    except Exception as e:
+        logger.error(f"Failed to send booking confirmation task: {e}")

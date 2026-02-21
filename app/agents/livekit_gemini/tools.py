@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from livekit.agents import function_tool
@@ -416,10 +416,11 @@ async def check_availability_for_rescheduling(patient_id: str) -> str:
         # 3. Get availability
         # Use provider from the missed appointment if possible, or fallback
         # Range: Next 7 days
-        start_date = datetime.now() + timedelta(minutes=30) # buffer
+        start_date = datetime.now(timezone.utc) + timedelta(minutes=30) # buffer
         end_date = start_date + timedelta(days=7)
         
         slots = await AvailabilityService.get_available_slots(
+            db=db,
             org_id=patient.organization_id,
             start_date=start_date,
             end_date=end_date,
@@ -492,11 +493,10 @@ async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
             return "Could not find the appointment to reschedule."
             
         try:
-            # We call the service logic here. 
-            updated_appt = await AppointmentService.reschedule_appointment(
+            service = AppointmentService(db)
+            updated_appt = await service.reschedule_appointment(
                 appointment_id=last_appointment.id,
-                new_start_time=new_time,
-                organization_id=patient.organization_id
+                new_scheduled_time=new_time,
             )
             
             # Log the reschedule action

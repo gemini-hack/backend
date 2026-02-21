@@ -165,6 +165,45 @@ class NotificationManager:
             reminder.mark_channel_attempt(ReminderChannel.VOICE, "failed", error=str(e))
             return False
 
+    async def send_booking_confirmation(
+        self,
+        patient: Patient,
+        appointment: Appointment,
+        channels: list[ReminderChannel] = None,
+    ) -> bool:
+        """
+        Send an immediate booking confirmation to the patient.
+        """
+        channels = channels or [ReminderChannel.EMAIL, ReminderChannel.SMS]
+        any_success = False
+        appt_time = appointment.scheduled_time.strftime('%B %d, %Y at %I:%M %p')
+        
+        for channel in channels:
+            try:
+                if channel == ReminderChannel.EMAIL and patient.email:
+                    success = await self.email_service.send_booking_confirmation(
+                        to_email=patient.email,
+                        patient_name=patient.first_name,
+                        appointment_time=appt_time,
+                        appointment_type=appointment.appointment_type,
+                    )
+                    if success: any_success = True
+                    
+                elif channel == ReminderChannel.SMS and patient.phone:
+                    success = await self.sms_service.send_booking_confirmation(
+                        to_phone=patient.phone,
+                        patient_name=patient.first_name,
+                        appointment_time=appt_time,
+                        appointment_type=appointment.appointment_type,
+                        organization_id=str(appointment.organization_id),
+                    )
+                    if success: any_success = True
+                    
+            except Exception as e:
+                logger.error(f"Booking confirmation {channel.value} failed: {e}")
+                
+        return any_success
+
     async def send_no_show_followup(
         self,
         patient: Patient,

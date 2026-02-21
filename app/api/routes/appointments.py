@@ -27,6 +27,7 @@ from app.utils.responses import success_response
 from app.utils.exceptions import NotFoundException, BadRequestException
 from app.utils.logger import logger
 from app.services.reminder_service import ReminderService
+from app.tasks.calendar_tasks import dispatch_calendar_sync, dispatch_calendar_delete
 
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
@@ -47,6 +48,13 @@ async def create_appointment(
     """
     Create a new appointment.
     """
+    # Validate scheduled_time is not in the past
+    scheduled = data.scheduled_time
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=timezone.utc)
+    if scheduled <= datetime.now(timezone.utc):
+        raise BadRequestException("Appointment time must be in the future")
+    
     # Verify patient exists and belongs to organization
     patient = await Patient.fetch_unique(
         db,
@@ -72,6 +80,13 @@ async def create_appointment(
 
     reminder_service = ReminderService(db)
     await reminder_service.schedule_reminders_for_appointment(appointment.id)
+    
+    # Sync to Google Calendar (async, best-effort)
+    dispatch_calendar_sync(appointment.id)
+    
+    # Send immediate booking confirmation to patient (email/SMS)
+    from app.tasks.reminders import send_booking_confirmation_task
+    send_booking_confirmation_task.delay(str(appointment.id))
     
     logger.info(f"Appointment created: {appointment.id} for patient {patient.id}")
     
@@ -272,6 +287,8 @@ async def update_appointment(
     if new_time and new_time != old_time:
         reminder_service = ReminderService(db)
         await reminder_service.reprime_reminders(appointment.id)
+        # Sync updated time to Google Calendar
+        dispatch_calendar_sync(appointment.id)
     
     logger.info(f"Appointment {appointment_id} updated")
     
@@ -415,6 +432,9 @@ async def cancel_appointment(
     # Cancel associated reminders (fixes Ghost Reminders)
     reminder_service = ReminderService(db)
     await reminder_service.cancel_reminders_for_appointment(appointment.id)
+    
+    # Delete Google Calendar event (async, best-effort)
+    dispatch_calendar_delete(appointment.id)
     
     logger.info(f"Appointment {appointment_id} cancelled")
     

@@ -181,6 +181,46 @@ class SMSService:
         except Exception as e:
             logger.exception(f"Unexpected SMS error: {e}")
             raise SMSDeliveryError(str(e), to_phone, e)
+
+    async def send_booking_confirmation(
+        self,
+        to_phone: str,
+        patient_name: str,
+        appointment_time: str,
+        appointment_type: str,
+        organization_id: str,
+        idempotency_key: Optional[str] = None,
+    ) -> str:
+        """
+        Send immediate appointment booking confirmation via SMS.
+        """
+        if not self.is_configured():
+            logger.warning("SMS service not configured, skipping send")
+            raise SMSDeliveryError("SMS service not configured", to_phone)
+        
+        if idempotency_key:
+            already_sent = await self._check_idempotency(idempotency_key)
+            if already_sent:
+                return "DUPLICATE_SKIPPED"
+        
+        await self._check_rate_limit(organization_id)
+        
+        message_body = (
+            f"Hi {patient_name}, your {appointment_type} appointment is confirmed for {appointment_time}. "
+            f"We look forward to seeing you!"
+        )
+        
+        try:
+            message = self.client.messages.create(
+                to=to_phone,
+                from_=self.from_number,
+                body=message_body,
+            )
+            logger.info(f"Booking confirmation SMS sent: {message.sid}")
+            return message.sid
+        except Exception as e:
+            logger.error(f"Failed to send booking confirmation SMS: {e}")
+            raise SMSDeliveryError(str(e), to_phone, e)
     
     async def send_no_show_followup(
         self,

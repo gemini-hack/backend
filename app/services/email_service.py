@@ -192,6 +192,43 @@ class EmailService:
         await self._send(to_email, subject, html)
         return True
 
+    async def send_booking_confirmation(
+        self,
+        to_email: str,
+        patient_name: str,
+        appointment_time: str,
+        appointment_type: str,
+        provider_name: str | None = None,
+    ) -> bool:
+        """Send appointment booking confirmation email."""
+        context = {
+            "patient_name": patient_name,
+            "appointment_time": appointment_time,
+            "appointment_type": appointment_type,
+            "provider_name": provider_name or "your healthcare provider",
+            "app_name": settings.APP_NAME,
+        }
+        subject, html = await self._get_rendered_template("appointment_confirmation", context)
+        
+        if not html:
+            subject = f"Appointment Confirmed - {settings.APP_NAME}"
+            html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Appointment Confirmed</h2>
+                <p>Hi {patient_name},</p>
+                <p>Your <strong>{appointment_type}</strong> appointment has been successfully scheduled:</p>
+                <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0;"><strong>Date & Time:</strong> {appointment_time}</p>
+                    <p style="margin: 5px 0 0 0;"><strong>With:</strong> {provider_name or "your healthcare provider"}</p>
+                </div>
+                <p>We look forward to seeing you!</p>
+                <p>Thank you,<br>{settings.APP_NAME} Team</p>
+            </div>
+            """
+        
+        await self._send(to_email, subject, html)
+        return True
+
     async def send_no_show_followup(
         self,
         to_email: str,
