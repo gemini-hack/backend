@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import List, Any
+from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import Organization
-from app.models.patient import Patient
 from app.models.agent import AgentAction, Alert, AlertSeverity, AlertStatus
 from app.agents.supervisor import SupervisorAgent
 from app.utils.logger import logger

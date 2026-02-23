@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import or_, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.patient import Patient, PatientStatus
 from app.models.conditions import Condition
 from app.models.user import User, UserRole
-from app.models.agent import Alert, AlertStatus, AlertSeverity, AgentAction
+from app.models.agent import AlertStatus, AlertSeverity
 from app.utils.logger import logger
 from app.utils.exceptions import NotFoundException, BadRequestException
 
@@ -75,6 +75,7 @@ class CaseloadService:
                 "alerts",
                 "agent_actions",
             )
+            .limit(1000)
             .all()
         )
 

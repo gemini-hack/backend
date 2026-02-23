@@ -5,7 +5,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.core.config import settings
 from app.core.observability import record_request, track_active_request
 
 
@@ -26,7 +25,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 response = await call_next(request)
                 status_code = response.status_code
                 return response
-            except Exception as e:
+            except Exception:
                 # Re-raise the exception after recording metrics
                 raise
             finally:

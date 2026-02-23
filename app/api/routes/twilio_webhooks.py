@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, Form
+from fastapi import APIRouter, Request, Form
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.database import async_session_factory
-from app.models import Patient, CallSession, CallStatus
+from app.models import Patient, CallSession
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["Twilio Webhooks"])
@@ -104,7 +104,6 @@ async def handle_inbound_voice(
     try:
         async with async_session_factory() as db:
             from app.models import CallType
-            import uuid
             
             room_name = f"inbound-{CallSid}"
             

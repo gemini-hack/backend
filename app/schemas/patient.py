@@ -13,6 +13,7 @@ from app.schemas.conditions import (
 from app.schemas.agent import AlertResponse, AgentActionResponse, ScheduledCheckResponse
 
 class PatientBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for patient."""
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
@@ -29,6 +30,7 @@ class PatientBase(BaseModel):
     allergies: List[str] = Field(default_factory=list)
 
 class PatientCreate(PatientBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating a patient."""
     patient_uid: str = Field(..., min_length=1, max_length=50)
     emergency_contact_name: Optional[str] = Field(None, max_length=200)
@@ -85,6 +87,7 @@ class PatientListResponse(BaseModel):
 
 
 class PatientUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating a patient."""
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)

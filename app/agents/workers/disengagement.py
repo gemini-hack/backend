@@ -1,12 +1,9 @@
-import uuid
-from datetime import datetime, timedelta, timezone
-from typing import List
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import BaseWorker
 from app.agents.context import AgentContext, WorkerResult, AgentAction
-from app.models.patient import Patient
 from app.schemas.thought_stream import ThoughtStage
 from app.services.action_idempotency import get_patients_with_recent_actions
 from app.utils.logger import logger

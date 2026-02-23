@@ -15,8 +15,6 @@ For video recording, this script has:
 """
 
 import time
-import random
-import requests
 import csv
 import io
 from datetime import datetime, timedelta
@@ -230,7 +228,7 @@ def run_demo():
         time.sleep(1.5)
         print_success("Upload complete! Patients imported to MIRA.")
         
-    except Exception as e:
+    except Exception:
         print(f"{Colors.WARNING}⚠️ Demo mode - simulating upload success{Colors.END}")
     
     # STEP 6: Trigger Agents
@@ -254,7 +252,7 @@ def run_demo():
     print(f"   • {Colors.WARNING}1 patient IIT (>28 days overdue) flagged{Colors.END}")
     
     print(f"\n{Colors.CYAN}AI agents are now analyzing and taking action...{Colors.END}")
-    print(f"Check the worker dashboard to see flagged patients.\n")
+    print("Check the worker dashboard to see flagged patients.\n")
 
 if __name__ == "__main__":
     run_demo()

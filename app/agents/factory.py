@@ -1,10 +1,9 @@
-from typing import List, Dict, Type, Any
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.base import BaseWorker
 from app.agents.workers.hypertension import HypertensionWorker
 from app.agents.workers.disengagement import DisengagementWorker
 from app.agents.workers.hiv import HIVWorker
-from app.agents.workers.critic import CriticWorker
 from app.agents.workers.followup_specialist import FollowUpSpecialist
 from app.utils.logger import logger
 

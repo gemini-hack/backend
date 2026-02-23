@@ -4,8 +4,8 @@ from typing import Optional, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.appointment import Appointment, AppointmentStatus, VisitMode
-from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
+from app.models.appointment import Appointment, AppointmentStatus
+from app.schemas.appointment import AppointmentCreate
 from app.utils.exceptions import NotFoundException, BadRequestException
 from app.utils.logger import logger
 from app.tasks.calendar_tasks import dispatch_calendar_sync, dispatch_calendar_delete
@@ -166,7 +166,7 @@ class AppointmentService:
         """Used by 'The Brain' to check patient history."""
         query = select(Appointment).where(
             Appointment.patient_id == patient_id
-        ).order_by(Appointment.scheduled_time.desc())
+        ).order_by(Appointment.scheduled_time.desc()).limit(100)
         
         result = await self.db.execute(query)
         return result.scalars().all()

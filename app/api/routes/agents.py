@@ -3,8 +3,7 @@ import json
 import asyncio
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, status as http_status, BackgroundTasks, Request, Query, WebSocket, WebSocketDisconnect
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Depends, status as http_status, Request, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (

@@ -12,13 +12,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import DbSession, CurrentUser, require_permission
 from app.models.user import Organization
 from app.models.patient import Patient, Gender, PatientStatus, CommunicationPreference
 from app.models.conditions import Condition, HIVProfile, RegimenLine
-from app.utils.responses import success_response, fail_response
+from app.utils.responses import success_response
 from app.utils.logger import logger
 
 
@@ -264,7 +263,7 @@ async def sync_ehr_data(
     
     return success_response(
         status_code=status.HTTP_202_ACCEPTED,
-        message=f"EHR sync completed",
+        message="EHR sync completed",
         data={
             "job_id": job_id,
             "status": "completed",

@@ -2,13 +2,11 @@ from datetime import datetime, timedelta, time, timezone
 from uuid import UUID
 from typing import List, Optional
 
-from sqlalchemy import select, and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.calendar import CalendarIntegration, CalendarProvider
-from app.models.user import User
 from app.services.google_calendar_service import GoogleCalendarService
 from app.utils.exceptions import (
     CalendarServiceError,

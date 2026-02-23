@@ -234,7 +234,7 @@ async def seed_hackathon_data():
             },
         ]
         
-        print(f"\n✅ PATIENTS (all with EMAIL preference):")
+        print("\n✅ PATIENTS (all with EMAIL preference):")
         print("-" * 50)
         
         created_patients = []
@@ -312,7 +312,7 @@ async def seed_hackathon_data():
         # -----------------------------------------------------------------
         # 6. APPOINTMENTS
         # -----------------------------------------------------------------
-        print(f"\n✅ APPOINTMENTS:")
+        print("\n✅ APPOINTMENTS:")
         print("-" * 50)
         
         # Define appointment notes based on patient condition

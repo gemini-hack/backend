@@ -2,7 +2,6 @@
 Notification Manager - Unified channel routing for appointment reminders.
 """
 import uuid
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

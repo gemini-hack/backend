@@ -3,7 +3,7 @@ import httpx
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
-from typing import Optional, List, Any, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -21,7 +21,6 @@ from app.core.config import settings
 from app.models.calendar import CalendarIntegration, CalendarProvider, IntegrationStatus
 from app.services.base import BaseService
 from app.utils.exceptions import (
-    CalendarServiceError,
     CalendarAuthError,
     CalendarAPIError,
     CalendarTokenExpiredError,
@@ -545,7 +544,6 @@ class GoogleCalendarService(BaseService):
 
     def _build_event_body(self, appointment) -> dict:
         """Build a Google Calendar event body from an Appointment."""
-        from app.models.appointment import VisitMode
         
         duration_minutes = 30  # Default slot duration
         start_dt = appointment.scheduled_time

@@ -1,10 +1,7 @@
-import os
-import time
 import requests
 import csv
 import io
 import random
-import uuid
 from datetime import datetime, timedelta
 
 # ==========================================

@@ -8,7 +8,6 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.user import Organization
 from app.services.twilio_provisioning import TwilioProvisioningService
-from app.core.config import settings
 from app.utils.logger import logger
 
 

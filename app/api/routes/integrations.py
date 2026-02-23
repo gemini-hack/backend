@@ -1,14 +1,12 @@
-from datetime import timedelta
 from html import escape
 from typing import Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 from fastapi.responses import HTMLResponse
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import CurrentUser, DbSession, get_db
-from app.models.calendar import CalendarIntegration, CalendarProvider, IntegrationStatus
+from app.api.dependencies import CurrentUser, DbSession
+from app.models.calendar import CalendarProvider, IntegrationStatus
 from app.services.google_calendar_service import GoogleCalendarService
 from app.utils.exceptions import (
     NotFoundException,
@@ -163,7 +161,7 @@ async def google_auth_callback(
         
     except CalendarAPIError as e:
         logger.error(f"OAuth token exchange failed: {e}")
-        return f"""
+        return """
         <html>
             <head><title>Connection Failed</title></head>
             <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">

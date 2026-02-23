@@ -1,5 +1,5 @@
 from google import genai
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 import json
 from app.core.config import settings
 from app.utils.logger import logger

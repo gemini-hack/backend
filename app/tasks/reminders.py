@@ -4,18 +4,15 @@ Reminder Celery Tasks.
 Handles scheduling and sending appointment reminders with cascade logic.
 """
 import asyncio
-import uuid
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from celery import shared_task
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from app.celery_app import celery_app
 from app.db.database import get_celery_session
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.patient import Patient
 from app.models.reminder import AppointmentReminder, ReminderChannel, ReminderStatus
 from app.services.notification_manager import NotificationManager
 # from app.services.reminder_service import ReminderService  <-- MOVED TO TASK

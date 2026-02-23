@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class OnboardingCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Single-step onboarding completion.
     
     All fields optional - timezone auto-detected from IP.

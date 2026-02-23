@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.db.base_model import Base
 
 # OpenTelemetry Instrumentation
 if settings.OTEL_ENABLED:

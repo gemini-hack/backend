@@ -7,7 +7,6 @@ This module provides:
 - Log correlation with trace context
 """
 
-import asyncio
 import functools
 import inspect
 import time

@@ -249,7 +249,7 @@ def delete_google_event(self, appointment_id: str):
 
             if integration.needs_reauth():
                 logger.warning(
-                    f"Calendar integration needs re-auth, clearing google_event_id"
+                    "Calendar integration needs re-auth, clearing google_event_id"
                 )
                 appointment.google_event_id = None
                 await db.commit()

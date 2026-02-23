@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from app.models.agent import AlertSeverity, AlertStatus
 
 class AlertBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for alert."""
     severity: AlertSeverity
     status: AlertStatus = AlertStatus.PENDING
@@ -29,6 +30,7 @@ class AlertResponse(AlertBase):
     model_config = ConfigDict(from_attributes=True)
 
 class AgentActionBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for agent action."""
     action_type: str = Field(..., max_length=50)
     status: str = Field("pending", max_length=20)
@@ -54,6 +56,7 @@ class AgentActionResponse(AgentActionBase):
     model_config = ConfigDict(from_attributes=True)
 
 class ScheduledCheckBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for scheduled check."""
     check_type: str = Field(..., max_length=50)
     scheduled_time: datetime

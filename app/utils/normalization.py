@@ -1,4 +1,3 @@
-import asyncio
 from app.services.ai_service import gemini_service
 from app.utils.logger import logger
 

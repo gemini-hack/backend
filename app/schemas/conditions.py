@@ -3,9 +3,10 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.conditions import Condition, WHOStage, FunctionalStatus, RegimenLine, EnrollmentSetting
+from app.models.conditions import WHOStage, FunctionalStatus, RegimenLine, EnrollmentSetting
 
 class HIVProfileBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for HIV Profile."""
     date_of_diagnosis: Optional[date] = None
     enrollment_setting: Optional[EnrollmentSetting] = None
@@ -33,10 +34,12 @@ class HIVProfileBase(BaseModel):
     last_viral_load_result: Optional[int] = None
 
 class HIVProfileCreate(HIVProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating HIV Profile."""
     pass
 
 class HIVProfileUpdate(HIVProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating HIV Profile."""
     pass
 
@@ -52,6 +55,7 @@ class HIVProfileResponse(HIVProfileBase):
 
 # Hypertension Profile Schemas
 class HypertensionProfileBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for Hypertension Profile."""
     date_of_diagnosis: Optional[date] = None
     baseline_systolic: Optional[int] = None
@@ -67,10 +71,12 @@ class HypertensionProfileBase(BaseModel):
     next_checkup_date: Optional[date] = None
 
 class HypertensionProfileCreate(HypertensionProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating Hypertension Profile."""
     pass
 
 class HypertensionProfileUpdate(HypertensionProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating Hypertension Profile."""
     pass
 
@@ -86,6 +92,7 @@ class HypertensionProfileResponse(HypertensionProfileBase):
 
 # Diabetes Profile Schemas
 class DiabetesProfileBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for Diabetes Profile."""
     date_of_diagnosis: Optional[date] = None
     diabetes_type: Optional[str] = None
@@ -102,10 +109,12 @@ class DiabetesProfileBase(BaseModel):
     last_kidney_function_date: Optional[date] = None
 
 class DiabetesProfileCreate(DiabetesProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating Diabetes Profile."""
     pass
 
 class DiabetesProfileUpdate(DiabetesProfileBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating Diabetes Profile."""
     pass
 

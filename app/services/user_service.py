@@ -2,8 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
@@ -22,7 +21,6 @@ from app.tasks.email import send_invitation_email_task
 from app.models.user import (
     User,
     UserRole,
-    RefreshToken,
     Invitation,
     InvitationStatus,
 )

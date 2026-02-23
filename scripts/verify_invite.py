@@ -1,13 +1,9 @@
-import asyncio
-import uuid
 from uuid import uuid4
 from unittest.mock import MagicMock, AsyncMock
 
 from app.models.user import User, Invitation, Team, Organization, UserRole
 from app.api.routes.teams import invite_worker_to_team
 from app.schemas.auth import InviteWorkerRequest
-from app.services.user_service import UserService
-from app.services.team_service import TeamService
 
 async def test_invite_flow():
     print("Testing Team Invite Flow...")

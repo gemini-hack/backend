@@ -5,7 +5,6 @@ import os
 # Add parent directory to path to import app modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import async_session_factory
 from app.models.template import EmailTemplate

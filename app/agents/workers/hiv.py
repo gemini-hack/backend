@@ -1,6 +1,3 @@
-import uuid
-from datetime import date, datetime
-from typing import List, Set
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -46,7 +43,6 @@ class HIVWorker(BaseWorker):
 
         # Load hiv_profiles for HIV patients 
         from app.models.patient import Patient
-        from app.models.conditions import HIVProfile
         hiv_patient_ids = [p.id for p in patients if p.primary_condition == Condition.HIV]
         
         # IDEMPOTENCY: Get patients with recent actions to skip

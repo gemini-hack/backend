@@ -3,18 +3,15 @@ Reminders API Routes.
 
 Endpoints for manual reminder management and status checking.
 """
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import and_
 
 from app.api.dependencies import CurrentUser, DbSession, require_permission
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.patient import Patient
 from app.models.reminder import AppointmentReminder, ReminderChannel, ReminderStatus
 from app.schemas.reminder import (
     ReminderResponse,
@@ -22,7 +19,6 @@ from app.schemas.reminder import (
     SendReminderNowRequest,
     ReminderCancelRequest,
 )
-from app.services.notification_manager import NotificationManager
 from app.tasks.reminders import send_reminder
 from app.utils.responses import success_response
 from app.utils.exceptions import NotFoundException, BadRequestException

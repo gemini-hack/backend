@@ -1,14 +1,13 @@
 import uuid
-from datetime import datetime, date, timedelta, timezone
-from typing import Optional, List
+from datetime import date, timedelta
+from typing import Optional
 
 from sqlalchemy import select, and_, func, or_
-from sqlalchemy.orm import selectinload
 
 from app.models.patient import Patient, PatientStatus
 from app.models.conditions import Condition, HIVProfile, HypertensionProfile, DiabetesProfile
 from app.models.user import User
-from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse, PatientDetailResponse
+from app.schemas.patient import PatientCreate, PatientResponse, PatientListResponse
 from app.services.base import BaseService
 from app.utils.logger import logger
 from app.utils.exceptions import NotFoundException, BadRequestException

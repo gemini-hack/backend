@@ -2,11 +2,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.api.dependencies import CurrentUser, DbSession
-from app.models import Patient, CallSession, CallType, CallStatus
+from app.models import Patient, CallSession, CallStatus
 from app.services.livekit_sip_service import LiveKitSIPService
 from app.tasks.outbound_calls import trigger_patient_call
 from app.core.config import settings

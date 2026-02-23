@@ -8,21 +8,18 @@ Permission model:
 - Assign patients: ORG_OWNER, ORG_ADMIN, or team member
 """
 
-from datetime import datetime, timezone
 from typing import Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.models.user import Team, User, Organization, UserRole
+from app.models.user import Team, User, UserRole
 from app.models.patient import Patient
 from app.schemas.teams import (
     TeamCreate,
     TeamUpdate,
     TeamResponse,
-    TeamDetailResponse,
     TeamMemberInfo,
 )
 from app.utils.logger import logger
@@ -483,7 +480,7 @@ class TeamService:
         members = await User.query(self.db).filter_by(
             team_id=team_id,
             organization_id=organization_id
-        ).all()
+        ).limit(100).all()
         
         return [
             TeamMemberInfo(

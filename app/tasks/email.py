@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 from app.celery_app import celery_app
 from app.utils.logger import logger
 from app.db.database import get_celery_session

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 
 from livekit.agents import function_tool
 from sqlalchemy import or_, func

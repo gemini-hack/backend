@@ -1,12 +1,9 @@
-import asyncio
-import uuid
 from uuid import uuid4
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock
 
-from app.models.user import User, Team, Organization, UserRole
+from app.models.user import User, UserRole
 from app.api.routes.teams import add_member
 from app.schemas.teams import AddMemberRequest
-from app.services.team_service import TeamService
 
 async def test_add_member_email_flow():
     print("Testing Add Member by Email Flow...")

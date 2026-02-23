@@ -6,7 +6,7 @@ Tracks multi-channel reminders for appointments with cascade logic.
 import uuid
 import enum
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import String, DateTime, ForeignKey, Enum, Index
 from sqlalchemy.dialects.postgresql import JSONB

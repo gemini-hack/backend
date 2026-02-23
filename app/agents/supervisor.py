@@ -2,7 +2,7 @@ import uuid
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import List
 from app.agents.base import BaseSupervisor, BaseWorker
 from app.agents.context import AgentContext, AgentAction
 from app.agents.thought_emitter import ThoughtEmitter
@@ -13,7 +13,7 @@ from app.utils.logger import logger
 
 from app.services.sms_service import SMSService
 from app.services.email_service import EmailService
-from app.models.patient import Patient, PatientStatus, CommunicationPreference
+from app.models.patient import CommunicationPreference
 
 class SupervisorAgent(BaseSupervisor):
     """
@@ -45,7 +45,7 @@ class SupervisorAgent(BaseSupervisor):
         await emitter.emit(
             agent_name=self.name,
             stage=ThoughtStage.LOADING_DATA,
-            content=f"🏥 Beginning morning rounds for organization..."
+            content="🏥 Beginning morning rounds for organization..."
         )
         
         # PHASE 0: Auto-detect and resolve outcomes from previous actions
@@ -62,7 +62,7 @@ class SupervisorAgent(BaseSupervisor):
         query = select(Patient).where(
             Patient.organization_id == organization_id,
             Patient.status == PatientStatus.ACTIVE
-        )
+        ).limit(500)
         result = await self.db.execute(query)
         patients = result.scalars().all()
         context.set("patients", patients)
@@ -279,7 +279,6 @@ class SupervisorAgent(BaseSupervisor):
         Uses Gemini Pro to synthesize all specialist reports and make final decisions.
         """
         from app.services.ai_service import gemini_service
-        import json
         
         # Prepare the specialist reports for the prompt
         reports = []

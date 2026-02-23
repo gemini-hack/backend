@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validat
 from app.models.appointment import AppointmentStatus, VisitMode
 
 class AppointmentCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema used by The Hand (Agent) or Frontend to book."""
     patient_id: UUID
     provider_id: Optional[UUID] = None
@@ -49,6 +50,7 @@ class AppointmentWithPatient(AppointmentResponse):
         return None
 
 class AppointmentUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating an appointment."""
     scheduled_time: Optional[datetime] = None
     appointment_type: Optional[str] = None

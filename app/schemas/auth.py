@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Annotated
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, ValidationInfo, BeforeValidator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, BeforeValidator
 import re
 
 from app.models.user import UserRole
@@ -34,6 +34,7 @@ LowercaseEmail = Annotated[EmailStr, BeforeValidator(normalize_email)]
 # ============== Organization Schemas ==============
 
 class OrganizationBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for organization."""
     name: str = Field(..., min_length=2, max_length=255)
     type: str = Field(..., min_length=2, max_length=50)
@@ -43,6 +44,7 @@ class OrganizationBase(BaseModel):
 
 
 class OrganizationCreate(OrganizationBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating an organization during registration."""
     pass
 
@@ -76,6 +78,7 @@ class OrganizationResponse(OrganizationBase):
 # ============== User Schemas ==============
 
 class UserBase(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Base schema for user."""
     email: LowercaseEmail
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -84,6 +87,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    model_config = ConfigDict(extra='forbid')
     """Schema for creating a user (owner during registration)."""
     password: str = Field(..., min_length=8, max_length=128)
     
@@ -129,6 +133,7 @@ class UserWithOrgResponse(UserResponse):
 
 
 class UserProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for updating user profile."""
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -138,6 +143,7 @@ class UserProfileUpdate(BaseModel):
 # ============== Registration Schemas ==============
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for organization + owner registration."""
     # Organization details
     organization_name: str = Field(..., min_length=2, max_length=255)
@@ -263,6 +269,7 @@ class RefreshResponse(BaseModel):
 # ============== Password Schemas ==============
 
 class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for changing password."""
     current_password: str
     new_password: str = Field(..., min_length=8, max_length=128)
@@ -296,6 +303,7 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for password reset."""
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
@@ -346,6 +354,7 @@ class ResendVerificationRequest(BaseModel):
 # ============== Invitation Schemas ==============
 
 class InviteWorkerRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for inviting a worker."""
     email: LowercaseEmail
     first_name: Optional[str] = Field(None, max_length=100)
@@ -436,6 +445,7 @@ class InvitationDetailsResponse(BaseModel):
 
 
 class AcceptInvitationRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Schema for accepting an invitation."""
     token: str
     password: str = Field(..., min_length=8, max_length=128)

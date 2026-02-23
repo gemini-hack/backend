@@ -1,21 +1,19 @@
 import uuid
 import enum
 from datetime import datetime, date
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import (
-    String, Text, Boolean, Integer, Float, Date, DateTime, ForeignKey, Enum, Index
+    String, Text, Boolean, Float, Date, DateTime, ForeignKey, Enum, Index
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 
 from app.db.base_model import BaseModel
 from app.models.conditions import Condition
 
 if TYPE_CHECKING:
     from app.models.conditions import HIVProfile, HypertensionProfile, DiabetesProfile
-    from app.models.agent import Alert, AgentAction, ScheduledCheck
 
 
 class Gender(str, enum.Enum):

@@ -20,7 +20,6 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
-    VerifyEmailRequest,
     ResendVerificationRequest,
     AcceptInvitationRequest,
     UserProfileUpdate,

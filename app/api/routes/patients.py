@@ -38,7 +38,6 @@ from app.services.storage_service import StorageService
 from app.services.ingestion_service import IngestionService
 from app.utils.logger import logger
 
-from app.services.team_service import PatientNotFoundError 
 
 
 from app.tasks.importer import process_patient_batch_import

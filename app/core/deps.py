@@ -4,10 +4,8 @@ from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import Optional
 import uuid
 
-from app.core.config import settings
 from app.core.redis import SessionStore
 from app.db.database import get_db
 from app.models.user import User, UserRole

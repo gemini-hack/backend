@@ -11,13 +11,11 @@ Tests cover:
 import pytest
 import uuid
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.agents.context import AgentContext, AgentAction, WorkerResult
-from app.agents.base import BaseWorker
 from app.agents.workers.disengagement import DisengagementWorker
 from app.agents.workers.hiv import HIVWorker
-from app.models.patient import Patient, PatientStatus, CommunicationPreference
 from app.models.conditions import Condition
 
 

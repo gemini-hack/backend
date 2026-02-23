@@ -7,7 +7,7 @@ from enum import Enum
 from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ThoughtStage(str, Enum):

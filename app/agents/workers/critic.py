@@ -1,7 +1,5 @@
-import uuid
-from typing import Dict, Any, List
 from app.agents.base import BaseWorker
-from app.agents.context import AgentContext, WorkerResult, AgentAction
+from app.agents.context import AgentContext, WorkerResult
 from app.utils.logger import logger
 
 class CriticWorker(BaseWorker):

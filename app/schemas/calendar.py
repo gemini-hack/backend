@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class CalendarProvider(str, Enum):
@@ -24,6 +24,7 @@ class IntegrationStatus(str, Enum):
 # Request Schemas
 
 class InitiateAuthRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Request to initiate OAuth flow (optional, for future use)."""
     provider: CalendarProvider = CalendarProvider.GOOGLE
 
@@ -92,6 +93,7 @@ class BusyPeriodsResponse(BaseModel):
 
 
 class SetTargetCalendarRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Request to set which Google Calendar to push MIRA events to."""
     target_calendar_id: str = Field(
         ..., 

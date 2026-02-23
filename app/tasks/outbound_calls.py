@@ -197,7 +197,7 @@ def trigger_patient_call(
         if result:
             logger.info(f"Celery task: trigger_patient_call completed: {result}")
         else:
-            logger.warning(f"Celery task: trigger_patient_call - call not initiated")
+            logger.warning("Celery task: trigger_patient_call - call not initiated")
             
         return result
         

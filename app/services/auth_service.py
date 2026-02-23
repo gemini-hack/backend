@@ -2,9 +2,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.services.base import BaseService
@@ -32,7 +29,6 @@ from app.core.redis import SessionStore
 from app.models.user import (
     User,
     Organization,
-    RefreshToken,
     EmailVerificationToken,
     UserRole,
 )

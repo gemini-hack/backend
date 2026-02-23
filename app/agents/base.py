@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 from app.agents.context import AgentContext, WorkerResult
-from app.utils.logger import logger
 
 class BaseAgent(ABC):
     """Base class for all agents."""

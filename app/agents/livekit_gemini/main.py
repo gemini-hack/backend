@@ -13,8 +13,8 @@ from app.db.database import async_session_factory
 from app.models import Patient
 from app.models.user import UserRole
 from .tools import MIRA_TOOLS
-from .voice_context import VoiceAgentUserContext, set_current_voice_context, clear_voice_context
-from .session_cache import preload_session_data, set_session_cache, clear_session_cache
+from .voice_context import VoiceAgentUserContext, set_current_voice_context
+from .session_cache import preload_session_data, set_session_cache
 from .transcript_buffer import get_buffer, clear_buffer_reference
 from .action_logger import set_current_room, clear_current_room
 

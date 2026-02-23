@@ -4,10 +4,10 @@ Reminder Schemas.
 Pydantic models for reminder API requests and responses.
 """
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, List
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.reminder import ReminderChannel, ReminderStatus
 
@@ -48,10 +48,12 @@ class ReminderListResponse(BaseModel):
 
 
 class SendReminderNowRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Request to send an immediate reminder."""
     channel: Optional[ReminderChannel] = None  # If None, uses patient preference
 
 
 class ReminderCancelRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     """Request to cancel a pending reminder."""
     reason: Optional[str] = None

@@ -10,7 +10,7 @@ import math
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import CurrentUser, DbSession, require_permission
