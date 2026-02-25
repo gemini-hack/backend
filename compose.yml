@@ -69,18 +69,52 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  agent:
+  # agent:
+  #   build:
+  #     context: .
+  #     target: runtime
+  #   command: python -m app.agents.livekit_gemini.main start
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - PYTHONPATH=/app
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  voice-agent:
     build:
       context: .
       target: runtime
-    command: python -m app.agents.livekit_gemini.main start
-    # volumes:
-    #   - .:/app
-    #   - /app/.venv
+    command: python scripts/run_voice_agent.py --max-restarts 0
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app
+      - MCP_SERVER_URL=http://mcp-server:8765/sse
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      target: runtime
+    command: python -m app.agents.livekit_gemini.mcp_server
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+    ports:
+      - "127.0.0.1:8765:8765"
     depends_on:
       db:
         condition: service_healthy

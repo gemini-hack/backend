@@ -254,8 +254,9 @@ async def mcp_initiate_outbound_call(patient_phone: str, session_id: str, _: Voi
 def run_mcp_server():
     """Start the MIRA MCP server on the configured port."""
     port = settings.MCP_SERVER_PORT
-    logger.info(f"Starting MIRA MCP Server on http://localhost:{port}/sse")
-    mcp.run(transport="sse", host="localhost", port=port)
+    host = settings.MCP_SERVER_HOST if hasattr(settings, "MCP_SERVER_HOST") else "0.0.0.0"
+    logger.info(f"Starting MIRA MCP Server on http://{host}:{port}/sse")
+    mcp.run(transport="sse", host=host, port=port)
 
 
 if __name__ == "__main__":
