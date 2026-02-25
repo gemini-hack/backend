@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET_NAME: str = "mira-uploads"
     S3_REGION: str = "us-east-1"
+    
+    # MCP Server (FastMCP)
+    MCP_SERVER_URL: str = ""
+    MCP_SERVER_PORT: int = 8765
 
     # LiveKit (Voice AI)
     LIVEKIT_URL: str = "wss://your-livekit-server.livekit.cloud"

@@ -1,10 +1,12 @@
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from google.genai import types
+from jose import jwt as jose_jwt
 from livekit import agents
-from livekit.agents import cli
+from livekit.agents import cli, mcp
 from livekit.plugins import google, silero
 
 from app.utils.logger import logger
@@ -18,7 +20,16 @@ from .session_cache import preload_session_data, set_session_cache
 from .transcript_buffer import get_buffer, clear_buffer_reference
 from .action_logger import set_current_room, clear_current_room
 
-# MIRA System Instructions
+def prewarm(proc: agents.JobProcess) -> None:
+    """Prewarm heavy modules once per worker process.
+
+    Silero VAD and the Google Realtime plugin pull large ONNX models on first
+    use.  Loading them here avoids a timeout during the first job and keeps
+    `initialize_process_timeout` low."""
+    proc.userdata["vad"] = silero.VAD.load()
+    logger.info("Prewarm complete — Silero VAD loaded")
+
+
 MIRA_INSTRUCTIONS = """You are MIRA, an autonomous AI care coordinator for HIV care teams. 
 You are NOT a passive chatbot. You are an active, intelligent member of the medical staff.
 
@@ -44,14 +55,8 @@ You are NOT a passive chatbot. You are an active, intelligent member of the medi
 
 
 async def _extract_voice_context(ctx: agents.JobContext) -> VoiceAgentUserContext | None:
-    """
-    Extract user context from room metadata or participant identity.
-    
-    The voice session endpoint should encode user info in the room metadata
-    when creating the session.
-    """
+    """Extract user context from room or participant metadata."""
     try:
-        # Try to get metadata from the room
         room_metadata = ctx.room.metadata
         if room_metadata:
             data = json.loads(room_metadata)
@@ -61,8 +66,7 @@ async def _extract_voice_context(ctx: agents.JobContext) -> VoiceAgentUserContex
                 role=UserRole(data["role"]),
                 full_name=data.get("full_name", "Unknown"),
             )
-        
-        # This is set by the voice session endpoint
+
         for participant in ctx.room.remote_participants.values():
             if participant.metadata:
                 data = json.loads(participant.metadata)
@@ -79,23 +83,17 @@ async def _extract_voice_context(ctx: agents.JobContext) -> VoiceAgentUserContex
 
 
 async def entrypoint(ctx: agents.JobContext):
-    """
-    Main entrypoint for the LiveKit agent following official Gemini Live API documentation.
-    """
-    logger.info(f"--- PRE-START: Agent connecting to room: {ctx.room.name} ---")
+    logger.info(f"Agent connecting to room: {ctx.room.name}")
     
     try:
         await ctx.connect()
-        logger.info(f"--- CONNECTED: Participant Identity: {ctx.room.local_participant.identity} ---")
-        
-        # Set up voice context from room/participant metadata
-        # The user info should be passed via room metadata when creating the voice session
+        logger.info(f"Connected as {ctx.room.local_participant.identity}")
+
         voice_ctx = await _extract_voice_context(ctx)
         if voice_ctx:
             set_current_voice_context(voice_ctx)
             logger.info(f"Voice context set: user={voice_ctx.user_id}, role={voice_ctx.role}")
-            
-            # Preload session data for faster tool calls
+
             try:
                 cache = await preload_session_data(
                     organization_id=voice_ctx.organization_id,
@@ -105,7 +103,6 @@ async def entrypoint(ctx: agents.JobContext):
             except Exception as e:
                 logger.warning(f"Failed to preload session data: {e}")
 
-        # Configure the RealtimeModel with VAD turn detection settings
         model = google.realtime.RealtimeModel(
             model="gemini-2.5-flash-native-audio-preview-12-2025",
             voice="aoede",
@@ -115,33 +112,56 @@ async def entrypoint(ctx: agents.JobContext):
             output_audio_transcription=types.AudioTranscriptionConfig(),
         )
 
-        # Initialize the AgentSession with VAD enabled for turn detection
-        session = agents.AgentSession(
-            llm=model,
-            tools=MIRA_TOOLS,
-            vad=silero.VAD.load(),
-        )
+        vad = ctx.proc.userdata.get("vad") or silero.VAD.load()
+        session_kwargs = {
+            "llm": model,
+            "vad": vad,
+        }
+        
+        if settings.MCP_SERVER_URL:
+            logger.info("Using MCP Server at %s", settings.MCP_SERVER_URL)
+            mcp_headers = {}
+            if voice_ctx:
+                mcp_token = jose_jwt.encode(
+                    {
+                        "sub": str(voice_ctx.user_id),
+                        "org_id": str(voice_ctx.organization_id),
+                        "role": voice_ctx.role.value,
+                        "full_name": voice_ctx.full_name,
+                        "iss": "mira-voice-agent",
+                        "aud": "mira-mcp-server",
+                        "exp": datetime.now(timezone.utc) + timedelta(hours=12),
+                    },
+                    settings.JWT_SECRET_KEY,
+                    algorithm=settings.JWT_ALGORITHM,
+                )
+                mcp_headers = {"Authorization": f"Bearer {mcp_token}"}
+            else:
+                logger.warning("No voice context — MCP tools will lack auth")
 
-        # Create the agent logic container
+            session_kwargs["mcp_servers"] = [mcp.MCPServerHTTP(
+                url=settings.MCP_SERVER_URL,
+                headers=mcp_headers,
+            )]
+            session_kwargs["tools"] = []
+        else:
+            logger.info("No MCP server configured, using static tools")
+            session_kwargs["tools"] = MIRA_TOOLS
+
+        session = agents.AgentSession(**session_kwargs)
+
         mira_agent = agents.Agent(
             instructions=MIRA_INSTRUCTIONS,
         )
 
-        logger.info(f"Starting AgentSession with {len(MIRA_TOOLS)} tools and VAD enabled")
-        
-        # Start the session. This publishes the agent's audio/video tracks.
         await session.start(mira_agent, room=ctx.room)
-        logger.info("AgentSession started with VAD turn detection.")
-        
-        # --- OBSERVABILITY AND TELEMETRY ---
+        logger.info("AgentSession started")
+
         if settings.OTEL_ENABLED:
             from livekit.agents.telemetry import set_tracer_provider
             from opentelemetry import trace
-            # Link LiveKit telemetry to the global OTEL tracer provider
             set_tracer_provider(trace.get_tracer_provider())
-            logger.info("LiveKit OpenTelemetry provider linked.")
 
-        # Metrics and Usage Collection
         usage_collector = agents.metrics.UsageCollector()
 
         @session.on("metrics_collected")
@@ -150,131 +170,108 @@ async def entrypoint(ctx: agents.JobContext):
             usage_collector.collect(ev.metrics)
         
         async def on_session_shutdown():
-            """Capture final session report and usage summary on disconnect."""
             logger.info(f"Session shutting down for room: {ctx.room.name}")
             try:
-                # 1. Capture structured session report (transcripts, events, etc.)
                 session_report = ctx.make_session_report()
-                # Log the report existence - the API may vary between versions
-                report_info = str(type(session_report))
-                logger.info(f"Session report generated: {report_info}")
-                
-                # 2. Log final usage summary (tokens, duration, costs)
-                usage_summary = usage_collector.get_summary()
-                logger.info(f"Final Usage Summary: {usage_summary}")
-                
+                logger.info(f"Session report: {type(session_report).__name__}")
+                logger.info(f"Usage: {usage_collector.get_summary()}")
             except Exception as e:
-                logger.error(f"Error generating session observability artifacts: {e}")
+                logger.error(f"Error in shutdown callback: {e}")
 
         ctx.add_shutdown_callback(on_session_shutdown)
 
-        # --- TRANSCRIPT AND ACTION LOGGING SETUP ---
         room_name = ctx.room.name
         transcript_buffer = get_buffer(room_name)
         set_current_room(room_name)
-        logger.info(f"Transcript buffer initialized for room: {room_name}")
-        
-        # Async handlers for transcript events (spawned as background tasks)
+
         async def _handle_user_speech(event):
-            """Capture user (patient) speech transcripts."""
             transcript = getattr(event, 'transcript', None) or str(event)
             await transcript_buffer.add_entry("user", transcript)
-        
+
         async def _handle_agent_speech(event):
-            """Capture agent (MIRA) speech transcripts."""
             transcript = getattr(event, 'transcript', None) or str(event)
             await transcript_buffer.add_entry("agent", transcript)
-        
-        # Hook into transcript events from Gemini
-        # NOTE: LiveKit requires sync callbacks - we spawn async tasks inside
+
         @session.on("user_speech_committed")
         def on_user_speech(event):
             asyncio.create_task(_handle_user_speech(event))
-        
+
         @session.on("agent_speech_committed")
         def on_agent_speech(event):
             asyncio.create_task(_handle_agent_speech(event))
 
-        # Force speech to confirm audio track is published and working
-        logger.info("Forcing initial greeting...")
         session.generate_reply(
             instructions="Please introduce yourself by saying: 'Hello, I am MIRA, your AI healthcare assistant. How can I help you today?'"
         )
         
-        # Keep running until disconnected
-        shutdown_future = asyncio.Future()
+        shutdown_future: asyncio.Future[None] = asyncio.Future()
 
         @ctx.room.on("disconnected")
         def on_disconnected(*args):
-             logger.info("Room disconnected - triggering post-call processing")
-             # Clean up action logger context
-             clear_current_room()
-             clear_buffer_reference(room_name)
-             if not shutdown_future.done():
-                 shutdown_future.set_result(None)
-        
-        # Handler for inbound SIP calls (patient calling in)
+            logger.info("Room disconnected - triggering post-call processing")
+            clear_current_room()
+            clear_buffer_reference(room_name)
+            if not shutdown_future.done():
+                shutdown_future.set_result(None)
+
         async def handle_participant_connected(participant):
-            """Handle new participant connections, especially SIP callers."""
             identity = participant.identity
             logger.info(f"Participant connected: {identity}")
-            
-            # Check if this is a SIP participant (inbound phone call)
+
             if identity.startswith("sip_") or identity.startswith("patient-"):
                 logger.info(f"SIP participant detected: {identity}")
-                
-                # For inbound calls, try to extract phone and lookup patient
                 try:
-                    # Extract phone number from SIP identity
-                    # Format is typically sip_+1234567890 or similar
-                    phone_number = None
-                    if identity.startswith("sip_"):
-                        phone_number = identity.replace("sip_", "").split("@")[0]
-                    
+                    phone_number = identity.replace("sip_", "").split("@")[0] if identity.startswith("sip_") else None
+
                     if phone_number:
-                        # Lookup patient by phone in database
                         async with async_session_factory() as db:
                             patient = await Patient.query(db).filter(
                                 Patient.phone == phone_number
                             ).first()
-                            
+
                             if patient:
-                                # Set context for inbound call
-                                inbound_context = VoiceAgentUserContext(
+                                set_current_voice_context(VoiceAgentUserContext(
                                     user_id=patient.primary_physician_id,
                                     organization_id=patient.organization_id,
-                                    role=None,  # Inbound call, no specific user role
+                                    role=None,
                                     full_name=f"Inbound: {patient.first_name} {patient.last_name}",
-                                )
-                                set_current_voice_context(inbound_context)
-                                logger.info(f"Set inbound call context for patient: {patient.id}")
+                                ))
+                                logger.info(f"Inbound call context set for patient {patient.id}")
                             else:
                                 logger.warning(f"No patient found for phone: {phone_number}")
-                                
                 except Exception as e:
                     logger.exception(f"Error handling SIP participant: {e}")
 
         @ctx.room.on("participant_connected")
         def on_participant_connected(participant):
-            """Sync wrapper that spawns async task for participant handling."""
             asyncio.create_task(handle_participant_connected(participant))
 
         await shutdown_future
-        logger.info("Agent disconnected from room.")
+        logger.info("Agent disconnected from room: %s", ctx.room.name)
 
     except Exception as e:
         logger.exception(f"CRITICAL ERROR in entrypoint: {e}")
         raise
+    finally:
+        try:
+            logger.info("Draining agent session...")
+            await session.drain()
+            await session.aclose()
+            logger.info("Agent session drained and closed cleanly.")
+        except Exception as exc:
+            logger.warning("Error during session teardown: %s", exc)
 
 
 if __name__ == "__main__":
-    # Run the worker with high capacity to avoid rejection
     logger.info("Starting LiveKit Worker for MIRA...")
     cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             worker_type=agents.WorkerType.ROOM,
             agent_name=settings.VOICE_AGENT_NAME,
             load_threshold=0.99,
+            initialize_process_timeout=60.0,   # allow time for model downloads
+            shutdown_process_timeout=30.0,     # allow drain to finish on shutdown
         )
     )

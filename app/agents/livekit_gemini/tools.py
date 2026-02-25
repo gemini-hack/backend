@@ -12,10 +12,12 @@ from .session_cache import get_session_cache
 from .action_logger import log_call_action
 from app.services.availability_service import AvailabilityService
 from app.services.appointment_service import AppointmentService
-from app.models.appointment import AppointmentStatus
+from app.services.reminder_service import ReminderService
+from app.services.livekit_sip_service import LiveKitSIPService
+from app.models.appointment import AppointmentStatus, VisitMode
+from app.schemas.appointment import AppointmentCreate
 
 
-@function_tool
 async def get_patient_info(patient_name: str) -> str:
     """
     Look up patient information by name.
@@ -84,7 +86,6 @@ Last Updated: {patient.updated_at.strftime('%Y-%m-%d') if patient.updated_at els
         )
 
 
-@function_tool
 async def get_patient_by_id(patient_id: str) -> str:
     """
     Look up patient information by their unique ID.
@@ -135,7 +136,6 @@ Primary Condition: {patient.primary_condition}"""
         return f"Error looking up patient: {str(e)}"
 
 
-@function_tool
 async def list_high_priority_patients(limit: int = 5) -> str:
     """
     Get a list of high priority patients that need attention.
@@ -185,7 +185,6 @@ async def list_high_priority_patients(limit: int = 5) -> str:
         return "\n".join(lines)
 
 
-@function_tool
 async def get_today_appointments() -> str:
     """
     Get all appointments scheduled for today.
@@ -232,7 +231,6 @@ async def get_today_appointments() -> str:
         return "\n".join(lines)
 
 
-@function_tool
 async def get_patient_appointments(patient_name: str) -> str:
     """
     Get upcoming appointments for a specific patient.
@@ -291,7 +289,6 @@ async def get_patient_appointments(patient_name: str) -> str:
         return "\n".join(lines)
 
 
-@function_tool
 async def get_active_alerts(limit: int = 5) -> str:
     """
     Get active alerts that need attention.
@@ -336,7 +333,6 @@ async def get_active_alerts(limit: int = 5) -> str:
         return "\n".join(lines)
 
 
-@function_tool
 async def get_my_caseload_summary() -> str:
     """
     Get a summary of the current user's caseload.
@@ -367,7 +363,6 @@ async def get_my_caseload_summary() -> str:
 
 
 
-@function_tool
 async def check_availability_for_rescheduling(patient_id: str) -> str:
     """
     Check if a patient has a missed appointment and find available slots for rescheduling.
@@ -444,7 +439,6 @@ To reschedule, please reply with the preferred time.
 """
 
 
-@function_tool
 async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
     """
     Confirm and execute the rescheduling of an appointment.
@@ -530,14 +524,153 @@ async def confirm_reschedule(patient_id: str, chosen_slot_iso: str) -> str:
             return f"Failed to reschedule: {str(e)}"
 
 
+async def create_appointment(patient_id: str, provider_id: str, scheduled_time: str, appointment_type: str, duration_minutes: int, notes: str = None) -> str:
+    """
+    Schedule a new appointment for a patient.
+    
+    Args:
+        patient_id: The patient's UID
+        provider_id: The provider's user ID
+        scheduled_time: ISO-formatted start time for the appointment
+        appointment_type: Type of the appointment (e.g. Follow-up, Consultation)
+        duration_minutes: Duration of the appointment in minutes
+        notes: (Optional) Any specific notes for the appointment
+        
+    Returns:
+        Confirmation message
+    """
+    valid, error = validate_input(patient_id, max_length=50, field_name="patient ID")
+    if not valid:
+        return error or "Invalid input."
+        
+    try:
+        new_time = datetime.fromisoformat(scheduled_time.replace("Z", "+00:00"))
+    except ValueError:
+        return "Invalid date format. Please provide ISO 8601 format."
+        
+    async with async_session_factory() as db:
+        patient = await Patient.query(db).filter(Patient.patient_uid == patient_id).first()
+        if not patient:
+            return "Patient not found."
+            
+        try:
+            from uuid import UUID
+            provider_uuid = UUID(provider_id) if provider_id else None
+            
+            data = AppointmentCreate(
+                patient_id=patient.id,
+                provider_id=provider_uuid,
+                scheduled_time=new_time,
+                appointment_type=appointment_type,
+                duration_minutes=duration_minutes,
+                visit_mode=VisitMode.IN_PERSON,
+                notes=notes
+            )
+            
+            service = AppointmentService(db)
+            appointment = await service.create_appointment(
+                data=data,
+                organization_id=patient.organization_id,
+                created_by_agent=True
+            )
+            
+            await log_call_action(
+                action_type="create_appointment",
+                action_data={
+                    "patient_id": patient_id,
+                    "scheduled_time": new_time.isoformat(),
+                    "appointment_type": appointment_type,
+                    "provider_id": provider_id
+                },
+                result="success"
+            )
+            
+            return f"Successfully booked appointment for {new_time.strftime('%b %d at %I:%M %p')}. Confirmation sent."
+            
+        except Exception as e:
+            logger.error(f"Failed to create appointment: {e}")
+            return f"Failed to book appointment: {str(e)}"
+
+async def send_reminder(appointment_id: str) -> str:
+    """
+    Send an immediate appointment reminder to a patient.
+    
+    Args:
+        appointment_id: The internal UUID of the appointment to send the reminder for
+        
+    Returns:
+        Confirmation message
+    """
+    try:
+        from uuid import UUID
+        appt_uuid = UUID(appointment_id)
+        
+        async with async_session_factory() as db:
+            service = ReminderService(db)
+            await service.schedule_reminders_for_appointment(appt_uuid)
+            
+            await log_call_action(
+                action_type="send_reminder",
+                action_data={"appointment_id": appointment_id},
+                result="success"
+            )
+            return "Appointment reminder has been dispatched successfully."
+    except Exception as e:
+        logger.error(f"Failed to send reminder for {appointment_id}: {e}")
+        return f"Failed to send appointment reminder: {str(e)}"
+
+async def initiate_outbound_call(patient_phone: str, session_id: str) -> str:
+    """
+    Dial out to a patient via Twilio SIP trunk to initiate a phone call.
+    Requires SIP calling capabilities to be active in LiveKit and Twilio.
+    
+    Args:
+        patient_phone: The patient's phone number in E.164 format (e.g. +1234567890)
+        session_id: The session ID
+        
+    Returns:
+        Confirmation message about the dialing state
+    """
+    valid, error = validate_input(patient_phone, max_length=20, field_name="patient phone")
+    if not valid:
+        return error or "Invalid input."
+        
+    try:
+        service = LiveKitSIPService()
+        if not service.is_sip_enabled():
+            return "Twilio SIP calling is not configured on this server."
+        
+        # Dial out 
+        metadata = {"agent_initiated": True, "type": "outbound_dial"}
+        room_name = await service.initiate_outbound_call(
+            patient_phone=patient_phone,
+            session_id=session_id,
+            metadata=metadata
+        )
+        
+        await log_call_action(
+            action_type="initiate_outbound_call",
+            action_data={"phone": patient_phone, "room_name": room_name},
+            result="success"
+        )
+        return f"Calling {patient_phone} now. Room established: {room_name}"
+        
+    except Exception as e:
+        logger.error(f"Failed to initiate call to {patient_phone}: {e}")
+        return f"Failed to dial patient: {str(e)}"
+
+
 MIRA_TOOLS = [
-    get_patient_info,
-    get_patient_by_id,
-    list_high_priority_patients,
-    get_today_appointments,
-    get_patient_appointments,
-    get_active_alerts,
-    get_my_caseload_summary,
-    check_availability_for_rescheduling,
-    confirm_reschedule,
+    function_tool(get_patient_info),
+    function_tool(get_patient_by_id),
+    function_tool(list_high_priority_patients),
+    function_tool(get_today_appointments),
+    function_tool(get_patient_appointments),
+    function_tool(get_active_alerts),
+    function_tool(get_my_caseload_summary),
+    function_tool(check_availability_for_rescheduling),
+    function_tool(confirm_reschedule),
+    function_tool(create_appointment),
+    function_tool(send_reminder),
+    function_tool(initiate_outbound_call),
 ]

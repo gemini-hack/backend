@@ -105,7 +105,7 @@ async def end_voice_session(
     db: DbSession,
 ):
     """End a voice session and clean up the room."""
-    if not room_name.startswith(f"voice-{user.id}"):
+    if not room_name.startswith(f"mira-voice-{user.id}"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to end this session",
