@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
 
 from app.agents.base import BaseWorker
@@ -178,15 +178,15 @@ class FollowUpSpecialist(BaseWorker):
         )
     
     async def _get_no_show_count(self, patient_id: uuid.UUID) -> int:
-        """Get count of past no-show appointments for a patient."""
-        query = select(Appointment).where(
+        """Get count of past no-show appointments for a patient (SQL-level count, no row loading)."""
+        query = select(func.count()).select_from(Appointment).where(
             and_(
                 Appointment.patient_id == patient_id,
                 Appointment.status == AppointmentStatus.NO_SHOW
             )
         )
         result = await self.db.execute(query)
-        return len(result.scalars().all())
+        return result.scalar_one()
     
     def _build_reminder_strategy(
         self,

@@ -58,7 +58,7 @@ class HypertensionWorker(BaseWorker):
                 result.proposed_actions.append(AgentAction(
                     type="emergency_escalation",
                     target_id=str(patient.id),
-                    details={
+                    content={
                         "systolic": systolic,
                         "diastolic": diastolic,
                         "severity": "CRITICAL"
@@ -71,7 +71,7 @@ class HypertensionWorker(BaseWorker):
                 result.proposed_actions.append(AgentAction(
                     type="urgent_followup",
                     target_id=str(patient.id),
-                    details={
+                    content={
                         "systolic": systolic,
                         "diastolic": diastolic,
                         "severity": "URGENT"
@@ -83,7 +83,7 @@ class HypertensionWorker(BaseWorker):
                 result.proposed_actions.append(AgentAction(
                     type="schedule_checkin",
                     target_id=str(patient.id),
-                    details={"days_from_now": 7},
+                    content={"days_from_now": 7},
                     reasoning=f"High BP Stage 1: {systolic}/{diastolic}. Weekly follow-up recommended.",
                     confidence=0.8
                 ))

@@ -195,7 +195,7 @@ async def detect_and_resolve_outcomes(
         "total": 0
     }
     
-    # Get all pending/sent actions for this org
+    # Get pending/sent actions for this org (bounded to prevent OOM on large orgs)
     query = select(AgentAction).options(
         selectinload(AgentAction.patient).selectinload(Patient.hiv_profile)
     ).where(
@@ -203,8 +203,8 @@ async def detect_and_resolve_outcomes(
             AgentAction.organization_id == organization_id,
             AgentAction.outcome.in_([ActionOutcome.PENDING, ActionOutcome.SENT])
         )
-    )
-    
+    ).limit(1000)
+
     result = await db.execute(query)
     actions = result.scalars().all()
     
