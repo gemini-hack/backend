@@ -17,6 +17,7 @@ from app.schemas.auth import OrganizationResponse
 from app.models.user import Organization
 from app.utils.responses import success_response
 from app.utils.logger import logger
+from app.middleware.rate_limit import limiter
 from sqlalchemy import select, desc, func
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
 async def list_agent_actions(
     user: CurrentUser,
     db: DbSession,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200, description="Max results to return"),
     assigned_to_me: bool = False,
 ):
     """
@@ -182,6 +183,22 @@ async def resolve_action_endpoint(
         )
     
     await resolve_action(db, action_id, f"Manually resolved by {user.email}: {reason}")
+
+    # Audit trail for clinical action resolution
+    from app.models.user import AuditLog
+    audit = AuditLog(
+        user_id=user.id,
+        organization_id=user.organization_id,
+        action="agent_action.resolve",
+        resource_type="agent_action",
+        resource_id=str(action_id),
+        details={
+            "action_type": action.action_type,
+            "patient_id": str(action.patient_id),
+            "reason": reason,
+        },
+    )
+    db.add(audit)
     await db.commit()
     
     # Push real-time notification to dashboard (triggers toast + stat card update)
@@ -239,16 +256,18 @@ async def list_alerts(
     summary="Trigger daily analysis",
     dependencies=[Depends(require_permission("agents:trigger"))],
 )
+@limiter.limit("3/15minutes")
 async def trigger_analysis_rounds(
+    request: Request,
     user: CurrentUser,
     db: DbSession,
 ):
     """
     Manually trigger a morning rounds analysis for the organization.
-    
+
     The analysis runs on the Celery worker (not the API server) to avoid
     blocking HTTP requests during heavy LLM processing.
-    
+
     Returns a cycle_id that can be used to subscribe to the thought stream.
     Connect to `/agents/stream/{cycle_id}` BEFORE calling this endpoint
     to observe the AI's thinking in real-time.

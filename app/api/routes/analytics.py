@@ -18,7 +18,6 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 async def get_admin_dashboard(
     user: CurrentUser,
     db: DbSession,
-    _: bool = Depends(require_permission("analytics:read")),
 ):
     """
     Get high-level statistics for the admin dashboard.

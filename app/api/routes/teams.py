@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 
 from app.api.dependencies import CurrentUser, DbSession, require_permission, get_client_ip
 from app.models.patient import Patient
+from app.models.user import UserRole
 from app.services.team_service import (
     TeamService,
     TeamNotFoundError,
