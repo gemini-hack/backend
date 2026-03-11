@@ -27,6 +27,7 @@ from app.schemas.auth import (
 )
 from app.utils.responses import success_response, auth_response, fail_response
 from app.utils.logger import logger
+from app.middleware.rate_limit import limiter
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     summary="Register organization and owner",
     description="Register a new organization along with its owner account.",
 )
+@limiter.limit("5/hour")
 async def register(
     request: Request,
     data: RegisterRequest,
@@ -71,6 +73,7 @@ async def register(
     summary="Login",
     description="Authenticate with email and password.",
 )
+@limiter.limit("10/15minutes")
 async def login(
     request: Request,
     data: LoginRequest,
@@ -204,6 +207,7 @@ async def change_password(
     status_code=status.HTTP_200_OK,
     summary="Request password reset",
 )
+@limiter.limit("5/hour")
 async def forgot_password(
     request: Request,
     data: ForgotPasswordRequest,
@@ -233,6 +237,7 @@ async def forgot_password(
     status_code=status.HTTP_200_OK,
     summary="Reset password",
 )
+@limiter.limit("5/hour")
 async def reset_password(
     request: Request,
     data: ResetPasswordRequest,

@@ -21,6 +21,9 @@ from app.utils.exception_handlers import (
     general_exception_handler,
 )
 from app.core.observability import setup_observability
+from app.middleware.rate_limit import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 # Initialize Observability
 setup_observability()
@@ -89,6 +92,10 @@ app.add_middleware(CorrelationIdMiddleware)
 
 # Add metrics middleware for request tracking
 app.add_middleware(MetricsMiddleware)
+
+# Rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Register exception handlers
 app.add_exception_handler(BaseAPIException, base_api_exception_handler)
